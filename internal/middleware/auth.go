@@ -70,9 +70,9 @@ func AuthRequired(authServiceURL string) gin.HandlerFunc {
 		// Extract organization ID from claims
 		orgID, ok := tokenResp.Claims["org_id"].(string)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token missing organization ID"})
-			c.Abort()
-			return
+			// If org_id is not in claims, set it to empty string (all orgs access)
+			orgID = ""
+			ok = true
 		}
 
 		// Check if this is an 'all organizations' request (empty org_id)
