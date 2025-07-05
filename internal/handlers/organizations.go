@@ -25,7 +25,7 @@ func NewOrganizationHandler(db *db.SpannerClient) *OrganizationHandler {
 // Create creates a new organization
 func (h *OrganizationHandler) Create(c *gin.Context) {
 	// Get user ID from context
-	userID, exists := c.Get("user_id")
+	_, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
 		return
@@ -78,11 +78,43 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 
 // List lists all organizations
 func (h *OrganizationHandler) List(c *gin.Context) {
-	// Get organizations from database
-	orgs, err := h.DB.ListOrganizations(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Check if this is an 'all organizations' request
+	allOrgsAccess, _ := c.Get("all_orgs_access")
+
+	// Get user ID from context
+	_, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
 		return
+	}
+
+	var orgs []*models.Organization
+	var err error
+
+	if allOrgsAccess == true {
+		// Get all organizations for this user
+		orgs, err = h.DB.ListOrganizations(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
+		// Get organization ID from context
+		orgID, exists := c.Get("org_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
+			return
+		}
+
+		// Get organization from database
+		org, err := h.DB.GetOrganization(c.Request.Context(), orgID.(string))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Return single organization as a slice
+		orgs = []*models.Organization{org}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"organizations": orgs})
