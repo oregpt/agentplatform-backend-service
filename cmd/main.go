@@ -24,14 +24,19 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize database connection
-	database, err := db.NewSpannerClient(context.Background(), cfg.GCPProjectID, cfg.SpannerInstance, cfg.SpannerDatabase)
+	// Initialize database
+	spannerClient, err := db.NewSpannerClient(context.Background(), cfg.GCPProjectID, cfg.SpannerInstance, cfg.SpannerDatabase)
 	if err != nil {
 		log.Fatalf("Failed to initialize Spanner client: %v", err)
 	}
-	defer database.Close()
+	defer spannerClient.Close()
 
-	// Initialize storage client
+	// Ensure tables exist
+	if err := spannerClient.EnsureTablesExist(context.Background()); err != nil {
+		log.Fatalf("Failed to ensure tables exist: %v", err)
+	}
+
+	// Initialize storage
 	storageClient, err := storage.NewGCSClient(context.Background(), cfg.GCPProjectID, cfg.GCSBucket)
 	if err != nil {
 		log.Fatalf("Failed to initialize GCS client: %v", err)
@@ -39,10 +44,10 @@ func main() {
 	defer storageClient.Close()
 
 	// Initialize handlers
-	orgHandler := handlers.NewOrganizationHandler(database)
-	agentHandler := handlers.NewAgentHandler(database)
-	fileHandler := handlers.NewFileHandler(database, storageClient)
-	userHandler := handlers.NewUserHandler(database)
+	orgHandler := handlers.NewOrganizationHandler(spannerClient)
+	agentHandler := handlers.NewAgentHandler(spannerClient)
+	fileHandler := handlers.NewFileHandler(spannerClient, storageClient)
+	userHandler := handlers.NewUserHandler(spannerClient)
 
 	// Set up Gin router
 	router := gin.Default()
@@ -61,13 +66,13 @@ func main() {
 		protected.Use(middleware.AuthRequired(cfg.AuthServiceURL))
 		{
 			// Organization routes
-			orgs := protected.Group("/organizations")
+			organizations := protected.Group("/organizations")
 			{
-				orgs.GET("", orgHandler.List)
-				orgs.POST("", orgHandler.Create)
-				orgs.GET("/:id", orgHandler.Get)
-				orgs.PUT("/:id", orgHandler.Update)
-				orgs.DELETE("/:id", orgHandler.Delete)
+				organizations.GET("", orgHandler.List)
+				organizations.POST("", orgHandler.Create)
+				organizations.GET("/:id", orgHandler.Get)
+				organizations.PUT("/:id", orgHandler.Update)
+				organizations.DELETE("/:id", orgHandler.Delete)
 			}
 
 			// Agent routes
@@ -98,8 +103,13 @@ func main() {
 				users.PUT("/:id", userHandler.Update)
 				users.DELETE("/:id", userHandler.Delete)
 				users.POST("/assign", userHandler.AssignToAgent)
-				users.DELETE("/:user_id/agents/:agent_id", userHandler.RemoveFromAgent)
-				users.GET("/:user_id/agents", userHandler.ListAgents)
+				
+				// Fix for route conflict - use a different route structure
+				userAgents := users.Group("/by-id/:user_id/agents")
+				{
+					userAgents.DELETE("/:agent_id", userHandler.RemoveFromAgent)
+					userAgents.GET("", userHandler.ListAgents)
+				}
 			}
 		}
 	}
@@ -118,18 +128,18 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shut down the server
+	// Wait for interrupt signal to gracefully shutdown the server
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down server...")
 
-	// Give outstanding requests a deadline for completion
+	// Create a deadline to wait for
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	log.Println("Server exited properly")
+	log.Println("Server exiting")
 }
