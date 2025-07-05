@@ -78,11 +78,8 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 
 // List lists all organizations
 func (h *OrganizationHandler) List(c *gin.Context) {
-	// Check if this is an 'all organizations' request
-	allOrgsAccess, _ := c.Get("all_orgs_access")
-
 	// Get user ID from context
-	_, exists := c.Get("user_id")
+	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
 		return
@@ -91,9 +88,12 @@ func (h *OrganizationHandler) List(c *gin.Context) {
 	var orgs []*models.Organization
 	var err error
 
+	// Check if this is an 'all organizations' request
+	allOrgsAccess, _ := c.Get("all_orgs_access")
+
 	if allOrgsAccess == true {
 		// Get all organizations for this user
-		orgs, err = h.DB.ListOrganizations(c.Request.Context())
+		orgs, err = h.DB.ListOrganizationsByUserID(c.Request.Context(), userID.(string))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

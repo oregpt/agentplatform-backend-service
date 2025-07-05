@@ -260,6 +260,42 @@ func (s *SpannerClient) ListOrganizations(ctx context.Context) ([]*models.Organi
 	return orgs, nil
 }
 
+// ListOrganizationsByUserID lists all organizations that a user has access to
+func (s *SpannerClient) ListOrganizationsByUserID(ctx context.Context, userID string) ([]*models.Organization, error) {
+	stmt := spanner.Statement{
+		SQL: `SELECT o.OrganizationID, o.Name, o.Description, o.CreatedBy, o.CreatedAt, o.UpdatedAt 
+			FROM Organizations o 
+			JOIN UserOrganizations uo ON o.OrganizationID = uo.OrganizationID 
+			WHERE uo.UserID = @userID`,
+		Params: map[string]interface{}{
+			"userID": userID,
+		},
+	}
+	
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+	
+	var orgs []*models.Organization
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		
+		var org models.Organization
+		if err := row.ToStruct(&org); err != nil {
+			return nil, err
+		}
+		
+		orgs = append(orgs, &org)
+	}
+	
+	return orgs, nil
+}
+
 // UpdateOrganization updates an organization
 func (s *SpannerClient) UpdateOrganization(ctx context.Context, org *models.Organization) error {
 	mutation := spanner.UpdateMap("Organizations", map[string]interface{}{
