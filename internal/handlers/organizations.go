@@ -43,7 +43,7 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 		ID:          uuid.New().String(),
 		Name:        req.Name,
 		Description: req.Description,
-		CreatedBy:   userID.(string),
+		CreatedBy:   c.GetString("user_id"),
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
