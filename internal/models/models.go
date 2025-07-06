@@ -16,39 +16,39 @@ type Organization struct {
 
 // Agent represents an AI agent in the system
 type Agent struct {
-	ID            string    `json:"id" spanner:"AgentID"`
+	ID             string    `json:"id" spanner:"AgentID"`
 	OrganizationID string    `json:"organization_id" spanner:"OrganizationID"`
-	Name          string    `json:"name" spanner:"Name"`
-	Description   string    `json:"description,omitempty" spanner:"Description"`
-	Instructions  string    `json:"instructions,omitempty" spanner:"Instructions"`
-	AIProvider    string    `json:"ai_provider" spanner:"AIProvider"`
-	CreatedBy     string    `json:"created_by" spanner:"CreatedBy"`
-	CreatedAt     time.Time `json:"created_at" spanner:"CreatedAt"`
-	UpdatedAt     time.Time `json:"updated_at" spanner:"UpdatedAt"`
+	Name           string    `json:"name" spanner:"Name"`
+	Description    string    `json:"description,omitempty" spanner:"Description"`
+	Instructions   string    `json:"instructions,omitempty" spanner:"Instructions"`
+	AIProvider     string    `json:"ai_provider" spanner:"AIProvider"`
+	CreatedBy      string    `json:"created_by" spanner:"CreatedBy"`
+	CreatedAt      time.Time `json:"created_at" spanner:"CreatedAt"`
+	UpdatedAt      time.Time `json:"updated_at" spanner:"UpdatedAt"`
 }
 
 // File represents a file uploaded to an agent
 type File struct {
-	ID            string    `json:"id" spanner:"FileID"`
-	AgentID       string    `json:"agent_id" spanner:"AgentID"`
+	ID             string    `json:"id" spanner:"FileID"`
+	AgentID        string    `json:"agent_id" spanner:"AgentID"`
 	OrganizationID string    `json:"organization_id" spanner:"OrganizationID"`
-	Name          string    `json:"name" spanner:"Name"`
-	Path          string    `json:"path" spanner:"Path"`
-	ContentType   string    `json:"content_type" spanner:"ContentType"`
-	SizeBytes     int64     `json:"size_bytes" spanner:"SizeBytes"`
-	CreatedBy     string    `json:"created_by" spanner:"CreatedBy"`
-	CreatedAt     time.Time `json:"created_at" spanner:"CreatedAt"`
+	Name           string    `json:"name" spanner:"Name"`
+	Path           string    `json:"path" spanner:"Path"`
+	ContentType    string    `json:"content_type" spanner:"ContentType"`
+	SizeBytes      int64     `json:"size_bytes" spanner:"SizeBytes"`
+	CreatedBy      string    `json:"created_by" spanner:"CreatedBy"`
+	CreatedAt      time.Time `json:"created_at" spanner:"CreatedAt"`
 }
 
 // UserOrg represents a user's membership in an organization
 type UserOrg struct {
-	UserID        string    `json:"user_id" spanner:"UserID"`
 	OrganizationID string    `json:"organization_id" spanner:"OrganizationID"`
-	Email         string    `json:"email" spanner:"Email"`
-	DisplayName   string    `json:"display_name,omitempty" spanner:"DisplayName"`
-	Role          string    `json:"role" spanner:"Role"`
-	CreatedAt     time.Time `json:"created_at" spanner:"CreatedAt"`
-	UpdatedAt     time.Time `json:"updated_at" spanner:"UpdatedAt"`
+	UserID         string    `json:"user_id" spanner:"UserID"`
+	Email          string    `json:"email" spanner:"Email"`
+	DisplayName    string    `json:"display_name,omitempty" spanner:"DisplayName"`
+	Role           string    `json:"role" spanner:"Role"`
+	CreatedAt      time.Time `json:"created_at" spanner:"CreatedAt"`
+	UpdatedAt      time.Time `json:"updated_at" spanner:"UpdatedAt"`
 }
 
 // User represents a user in the system (core user data)
@@ -65,10 +65,10 @@ type User struct {
 
 // UserAgent represents a relationship between a user and an agent
 type UserAgent struct {
-	UserID        string    `json:"user_id" spanner:"UserID"`
 	OrganizationID string    `json:"organization_id" spanner:"OrganizationID"`
-	AgentID       string    `json:"agent_id" spanner:"AgentID"`
-	CreatedAt     time.Time `json:"created_at" spanner:"CreatedAt"`
+	UserID         string    `json:"user_id" spanner:"UserID"`
+	AgentID        string    `json:"agent_id" spanner:"AgentID"`
+	CreatedAt      time.Time `json:"created_at" spanner:"CreatedAt"`
 }
 
 // CreateOrganizationRequest represents a request to create an organization
