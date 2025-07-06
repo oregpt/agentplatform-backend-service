@@ -25,9 +25,16 @@ func NewOrganizationHandler(db *db.SpannerClient) *OrganizationHandler {
 // Create creates a new organization
 func (h *OrganizationHandler) Create(c *gin.Context) {
 	// Get user ID from context
-	_, exists := c.Get("user_id")
+	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		return
+	}
+
+	// Get user email from context
+	userEmail, exists := c.Get("user_email")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User email not found in context"})
 		return
 	}
 
@@ -43,7 +50,7 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 		ID:          uuid.New().String(),
 		Name:        req.Name,
 		Description: req.Description,
-		CreatedBy:   c.GetString("user_id"),
+		CreatedBy:   userID.(string),
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -51,6 +58,29 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 	// Save organization
 	if err := h.DB.CreateOrganization(c.Request.Context(), org); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create user organization membership for the creator (as admin)
+	now := time.Now()
+	userOrg := &models.UserOrg{
+		OrganizationID: org.ID,
+		UserID:         userID.(string),
+		Email:          userEmail.(string),
+		DisplayName:    "", // We don't have display name in the context, can be updated later
+		Role:           "admin", // Creator is always an admin
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	// Save user organization membership
+	if err := h.DB.CreateUserOrg(c.Request.Context(), userOrg); err != nil {
+		// Log the error but don't fail the request since the organization was created successfully
+		// In a production system, you might want to roll back the organization creation or retry
+		c.JSON(http.StatusCreated, gin.H{
+			"organization": org,
+			"warning":      "Organization created but failed to assign creator as admin: " + err.Error(),
+		})
 		return
 	}
 
