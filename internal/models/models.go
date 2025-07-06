@@ -85,10 +85,11 @@ type UpdateOrganizationRequest struct {
 
 // CreateAgentRequest represents a request to create an agent
 type CreateAgentRequest struct {
-	Name         string `json:"name" binding:"required"`
-	Description  string `json:"description"`
-	Instructions string `json:"instructions"`
-	AIProvider   string `json:"ai_provider" binding:"required"`
+	Name           string `json:"name" binding:"required"`
+	Description    string `json:"description"`
+	Instructions   string `json:"instructions"`
+	AIProvider     string `json:"ai_provider" binding:"required"`
+	OrganizationID string `json:"organization_id"`
 }
 
 // UpdateAgentRequest represents a request to update an agent
