@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -286,36 +287,47 @@ func (h *AgentHandler) Delete(c *gin.Context) {
 
 	log.Printf("[Agent Delete] Attempting to delete agent with ID: %s", agentID)
 
-	// Get user ID from context for logging
+	// Get user ID from context
 	userID, exists := c.Get("user_id")
-	if exists {
-		log.Printf("[Agent Delete] Request initiated by user: %s", userID.(string))
-	}
-
-	// Get agent from database
-	agent, err := h.DB.GetAgent(c.Request.Context(), agentID)
-	if err != nil {
-		log.Printf("[Agent Delete] Error retrieving agent %s: %v", agentID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if !exists {
+		log.Printf("[Agent Delete] Error: User ID not found in context")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
 		return
 	}
+	log.Printf("[Agent Delete] Request initiated by user: %s", userID.(string))
 
-	// Check if agent belongs to the user's organization
+	// Get organization ID from context
 	orgID, exists := c.Get("org_id")
 	if !exists {
 		log.Printf("[Agent Delete] Error: Organization ID not found in context")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
 		return
 	}
-	
-	log.Printf("[Agent Delete] Verifying agent %s belongs to organization %s", agentID, orgID.(string))
-	
-	if agent.OrganizationID != orgID.(string) {
-		log.Printf("[Agent Delete] Error: Agent %s belongs to organization %s, not user's organization %s", 
-			agentID, agent.OrganizationID, orgID.(string))
-		c.JSON(http.StatusForbidden, gin.H{"error": "Agent does not belong to your organization"})
+	log.Printf("[Agent Delete] Current organization context: %s", orgID.(string))
+
+	// Check if agent exists
+	_, err := h.DB.GetAgent(c.Request.Context(), agentID)
+	if err != nil {
+		log.Printf("[Agent Delete] Error retrieving agent %s: %v", agentID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Check if user has access to this agent through UserAgent mappings
+	hasAccess, err := h.DB.CheckUserAgentAccess(c.Request.Context(), userID.(string), agentID)
+	if err != nil {
+		log.Printf("[Agent Delete] Error checking user access to agent: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error checking access: %v", err)})
+		return
+	}
+
+	if !hasAccess {
+		log.Printf("[Agent Delete] Error: User %s does not have access to agent %s", userID.(string), agentID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have access to this agent"})
+		return
+	}
+
+	log.Printf("[Agent Delete] User %s has access to agent %s, proceeding with deletion", userID.(string), agentID)
 
 	// Delete agent and related UserAgent records from database
 	log.Printf("[Agent Delete] Deleting agent %s and related UserAgent records", agentID)

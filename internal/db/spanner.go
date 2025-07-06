@@ -443,6 +443,36 @@ func (s *SpannerClient) UpdateAgent(ctx context.Context, agent *models.Agent) er
 	return err
 }
 
+// CheckUserAgentAccess checks if a user has access to an agent through UserAgent mappings
+func (s *SpannerClient) CheckUserAgentAccess(ctx context.Context, userID string, agentID string) (bool, error) {
+	// Query to check if a UserAgent mapping exists for this user and agent
+	query := spanner.Statement{
+		SQL: `SELECT COUNT(*) FROM UserAgents WHERE UserID = @userID AND AgentID = @agentID`,
+		Params: map[string]interface{}{
+			"userID": userID,
+			"agentID": agentID,
+		},
+	}
+
+	iter := s.Client.Single().Query(ctx, query)
+	defer iter.Stop()
+
+	row, err := iter.Next()
+	if err == iterator.Done {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("error checking user agent access: %v", err)
+	}
+
+	var count int64
+	if err := row.Columns(&count); err != nil {
+		return false, fmt.Errorf("error scanning count: %v", err)
+	}
+
+	return count > 0, nil
+}
+
 // DeleteAgent deletes an agent and all related UserAgent records
 func (s *SpannerClient) DeleteAgent(ctx context.Context, agentID string) error {
 	// First, find all UserAgent records for this agent

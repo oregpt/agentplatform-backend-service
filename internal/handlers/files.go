@@ -64,14 +64,21 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	}
 	fmt.Printf("[File Upload] Agent found: ID=%s, Organization=%s\n", agent.ID, agent.OrganizationID)
 
-	// Verify agent belongs to the organization
-	if agent.OrganizationID != orgID.(string) {
-		fmt.Printf("[File Upload] ERROR: Agent organization mismatch. Agent org: %s, Request org: %s\n", 
-			agent.OrganizationID, orgID.(string))
-		c.JSON(http.StatusForbidden, gin.H{"error": "Agent does not belong to your organization"})
+	// Check if user has access to this agent through UserAgent mappings
+	fmt.Printf("[File Upload] Checking if user %s has access to agent %s\n", userID.(string), agentID)
+	hasAccess, err := h.DB.CheckUserAgentAccess(c.Request.Context(), userID.(string), agentID)
+	if err != nil {
+		fmt.Printf("[File Upload] ERROR: Failed to check user access to agent: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to check access: %v", err)})
 		return
 	}
-	fmt.Println("[File Upload] Agent organization verification successful")
+
+	if !hasAccess {
+		fmt.Printf("[File Upload] ERROR: User %s does not have access to agent %s\n", userID.(string), agentID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have access to this agent"})
+		return
+	}
+	fmt.Printf("[File Upload] User %s has access to agent %s, proceeding with upload\n", userID.(string), agentID)
 
 	// Get file from form
 	fmt.Println("[File Upload] Getting file from form data...")
