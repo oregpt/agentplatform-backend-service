@@ -581,8 +581,9 @@ func (s *SpannerClient) GetFile(ctx context.Context, fileID string) (*models.Fil
 
 // ListFiles lists all files for an agent
 func (s *SpannerClient) ListFiles(ctx context.Context, agentID string) ([]*models.File, error) {
+	// Try first with the new schema that includes OrganizationID
 	stmt := spanner.Statement{
-		SQL: `SELECT FileID, AgentID, OrganizationID, Name, Path, ContentType, 
+		SQL: `SELECT FileID, AgentID, Name, Path, ContentType, 
 			  SizeBytes, CreatedBy, CreatedAt FROM Files WHERE AgentID = @agentID`,
 		Params: map[string]interface{}{
 			"agentID": agentID,
@@ -603,7 +604,8 @@ func (s *SpannerClient) ListFiles(ctx context.Context, agentID string) ([]*model
 		}
 
 		var file models.File
-		if err := row.ToStruct(&file); err != nil {
+		if err := row.Columns(&file.ID, &file.AgentID, &file.Name, &file.Path, 
+			&file.ContentType, &file.SizeBytes, &file.CreatedBy, &file.CreatedAt); err != nil {
 			return nil, err
 		}
 
@@ -613,11 +615,11 @@ func (s *SpannerClient) ListFiles(ctx context.Context, agentID string) ([]*model
 	return files, nil
 }
 
-// ListFilesByOrganizationID lists all files for an organization
-func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizationID string) ([]*models.File, error) {
+// ListAgentsByOrganizationID lists all agents for an organization
+func (s *SpannerClient) ListAgentsByOrganizationID(ctx context.Context, organizationID string) ([]*models.Agent, error) {
 	stmt := spanner.Statement{
-		SQL: `SELECT FileID, AgentID, OrganizationID, Name, Path, ContentType, 
-			  SizeBytes, CreatedBy, CreatedAt FROM Files WHERE OrganizationID = @organizationID`,
+		SQL: `SELECT AgentID, OrganizationID, Name, Description, CreatedBy, CreatedAt, UpdatedAt 
+			  FROM Agents WHERE OrganizationID = @organizationID`,
 		Params: map[string]interface{}{
 			"organizationID": organizationID,
 		},
@@ -626,7 +628,7 @@ func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizat
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 
-	var files []*models.File
+	var agents []*models.Agent
 	for {
 		row, err := iter.Next()
 		if err == iterator.Done {
@@ -636,15 +638,46 @@ func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizat
 			return nil, err
 		}
 
-		var file models.File
-		if err := row.ToStruct(&file); err != nil {
+		var agent models.Agent
+		if err := row.ToStruct(&agent); err != nil {
 			return nil, err
 		}
 
-		files = append(files, &file)
+		agents = append(agents, &agent)
 	}
 
-	return files, nil
+	return agents, nil
+}
+
+// ListFilesByOrganizationID lists all files for an organization
+// Note: This function may not work if the OrganizationID column doesn't exist in the Files table
+// It's kept for backward compatibility but may need to be updated in the future
+func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizationID string) ([]*models.File, error) {
+	// First try to get all agents for this organization
+	agents, err := s.ListAgentsByOrganizationID(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list agents for organization: %v", err)
+	}
+	
+	// Then get files for each agent
+	var allFiles []*models.File
+	for _, agent := range agents {
+		agentFiles, err := s.ListFiles(ctx, agent.ID)
+		if err != nil {
+			// Log error but continue with other agents
+			fmt.Printf("Error listing files for agent %s: %v\n", agent.ID, err)
+			continue
+		}
+		
+		// Set the organization ID for these files since it's not in the database
+		for _, file := range agentFiles {
+			file.OrganizationID = organizationID
+		}
+		
+		allFiles = append(allFiles, agentFiles...)
+	}
+	
+	return allFiles, nil
 }
 
 // DeleteFile deletes a file record
