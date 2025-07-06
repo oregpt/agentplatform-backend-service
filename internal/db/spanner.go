@@ -85,7 +85,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 		"Organizations",
 		"Agents",
 		"Files",
-		"Users",
+		"UserOrgs",
 		"UserAgents",
 	}
 	
@@ -155,10 +155,10 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 		`)
 	}
 	
-	// Users table
-	if !existingTables["Users"] {
+	// UserOrgs table
+	if !existingTables["UserOrgs"] {
 		statements = append(statements, `
-			CREATE TABLE Users (
+			CREATE TABLE UserOrgs (
 				UserID STRING(128) NOT NULL,
 				OrganizationID STRING(36) NOT NULL,
 				Email STRING(255) NOT NULL,
@@ -180,7 +180,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 				AgentID STRING(36) NOT NULL,
 				CreatedAt TIMESTAMP NOT NULL,
 			) PRIMARY KEY (UserID, OrganizationID, AgentID),
-			INTERLEAVE IN PARENT Users ON DELETE CASCADE
+			INTERLEAVE IN PARENT UserOrgs ON DELETE CASCADE
 		`)
 	}
 	
@@ -262,9 +262,9 @@ func (s *SpannerClient) ListOrganizations(ctx context.Context) ([]*models.Organi
 
 // ListOrganizationsByUserID lists all organizations that a user has access to
 func (s *SpannerClient) ListOrganizationsByUserID(ctx context.Context, userID string) ([]*models.Organization, error) {
-	// First, find all organizations the user belongs to by querying the Users table
+	// First, find all organizations the user belongs to by querying the UserOrgs table
 	stmt := spanner.Statement{
-		SQL: `SELECT DISTINCT OrganizationID FROM Users WHERE UserID = @userID`,
+		SQL: `SELECT DISTINCT OrganizationID FROM UserOrgs WHERE UserID = @userID`,
 		Params: map[string]interface{}{
 			"userID": userID,
 		},
@@ -535,44 +535,44 @@ func (s *SpannerClient) DeleteFile(ctx context.Context, fileID string) error {
 	return err
 }
 
-// CreateUser creates a new user
-func (s *SpannerClient) CreateUser(ctx context.Context, user *models.User) error {
-	mutation := spanner.InsertOrUpdateMap("Users", map[string]interface{}{
-		"UserID":         user.ID,
-		"OrganizationID": user.OrganizationID,
-		"Email":          user.Email,
-		"DisplayName":    user.DisplayName,
-		"Role":           user.Role,
-		"CreatedAt":      user.CreatedAt,
-		"UpdatedAt":      user.UpdatedAt,
+// CreateUserOrg creates a new user organization membership
+func (s *SpannerClient) CreateUserOrg(ctx context.Context, userOrg *models.UserOrg) error {
+	mutation := spanner.InsertOrUpdateMap("UserOrgs", map[string]interface{}{
+		"UserID":         userOrg.UserID,
+		"OrganizationID": userOrg.OrganizationID,
+		"Email":          userOrg.Email,
+		"DisplayName":    userOrg.DisplayName,
+		"Role":           userOrg.Role,
+		"CreatedAt":      userOrg.CreatedAt,
+		"UpdatedAt":      userOrg.UpdatedAt,
 	})
 	
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
 
-// GetUser gets a user by ID and organization ID
-func (s *SpannerClient) GetUser(ctx context.Context, userID, orgID string) (*models.User, error) {
-	row, err := s.Client.Single().ReadRow(ctx, "Users", spanner.Key{userID, orgID}, []string{
+// GetUserOrg gets a user organization membership by user ID and organization ID
+func (s *SpannerClient) GetUserOrg(ctx context.Context, userID, orgID string) (*models.UserOrg, error) {
+	row, err := s.Client.Single().ReadRow(ctx, "UserOrgs", spanner.Key{userID, orgID}, []string{
 		"UserID", "OrganizationID", "Email", "DisplayName", "Role", "CreatedAt", "UpdatedAt",
 	})
 	if err != nil {
 		return nil, err
 	}
 	
-	var user models.User
-	if err := row.ToStruct(&user); err != nil {
+	var userOrg models.UserOrg
+	if err := row.ToStruct(&userOrg); err != nil {
 		return nil, err
 	}
 	
-	return &user, nil
+	return &userOrg, nil
 }
 
-// ListUsers lists all users for an organization
-func (s *SpannerClient) ListUsers(ctx context.Context, orgID string) ([]*models.User, error) {
+// ListUserOrgs lists all user organization memberships for an organization
+func (s *SpannerClient) ListUserOrgs(ctx context.Context, orgID string) ([]*models.UserOrg, error) {
 	stmt := spanner.Statement{
 		SQL: `SELECT UserID, OrganizationID, Email, DisplayName, Role, CreatedAt, UpdatedAt 
-			  FROM Users WHERE OrganizationID = @orgID`,
+			  FROM UserOrgs WHERE OrganizationID = @orgID`,
 		Params: map[string]interface{}{
 			"orgID": orgID,
 		},
@@ -581,7 +581,7 @@ func (s *SpannerClient) ListUsers(ctx context.Context, orgID string) ([]*models.
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 	
-	var users []*models.User
+	var userOrgs []*models.UserOrg
 	for {
 		row, err := iter.Next()
 		if err == iterator.Done {
@@ -591,35 +591,34 @@ func (s *SpannerClient) ListUsers(ctx context.Context, orgID string) ([]*models.
 			return nil, err
 		}
 		
-		var user models.User
-		if err := row.ToStruct(&user); err != nil {
+		var userOrg models.UserOrg
+		if err := row.ToStruct(&userOrg); err != nil {
 			return nil, err
 		}
 		
-		users = append(users, &user)
+		userOrgs = append(userOrgs, &userOrg)
 	}
 	
-	return users, nil
+	return userOrgs, nil
 }
 
-// UpdateUser updates a user
-func (s *SpannerClient) UpdateUser(ctx context.Context, user *models.User) error {
-	mutation := spanner.UpdateMap("Users", map[string]interface{}{
-		"UserID":         user.ID,
-		"OrganizationID": user.OrganizationID,
-		"Email":          user.Email,
-		"DisplayName":    user.DisplayName,
-		"Role":           user.Role,
-		"UpdatedAt":      user.UpdatedAt,
+// UpdateUserOrg updates a user organization membership
+func (s *SpannerClient) UpdateUserOrg(ctx context.Context, userOrg *models.UserOrg) error {
+	mutation := spanner.UpdateMap("UserOrgs", map[string]interface{}{
+		"UserID":         userOrg.UserID,
+		"OrganizationID": userOrg.OrganizationID,
+		"DisplayName":    userOrg.DisplayName,
+		"Role":           userOrg.Role,
+		"UpdatedAt":      userOrg.UpdatedAt,
 	})
 	
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
 
-// DeleteUser deletes a user
-func (s *SpannerClient) DeleteUser(ctx context.Context, userID, orgID string) error {
-	mutation := spanner.Delete("Users", spanner.Key{userID, orgID})
+// DeleteUserOrg deletes a user organization membership
+func (s *SpannerClient) DeleteUserOrg(ctx context.Context, userID, orgID string) error {
+	mutation := spanner.Delete("UserOrgs", spanner.Key{userID, orgID})
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }

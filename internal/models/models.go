@@ -40,15 +40,27 @@ type File struct {
 	CreatedAt     time.Time `json:"created_at" spanner:"CreatedAt"`
 }
 
-// User represents a user in the system
-type User struct {
-	ID            string    `json:"id" spanner:"UserID"`
+// UserOrg represents a user's membership in an organization
+type UserOrg struct {
+	UserID        string    `json:"user_id" spanner:"UserID"`
 	OrganizationID string    `json:"organization_id" spanner:"OrganizationID"`
 	Email         string    `json:"email" spanner:"Email"`
 	DisplayName   string    `json:"display_name,omitempty" spanner:"DisplayName"`
 	Role          string    `json:"role" spanner:"Role"`
 	CreatedAt     time.Time `json:"created_at" spanner:"CreatedAt"`
 	UpdatedAt     time.Time `json:"updated_at" spanner:"UpdatedAt"`
+}
+
+// User represents a user in the system (core user data)
+type User struct {
+	ID          string    `json:"id" spanner:"UserID"`
+	Email       string    `json:"email" spanner:"Email"`
+	DisplayName string    `json:"display_name,omitempty" spanner:"DisplayName"`
+	Address     string    `json:"address,omitempty" spanner:"Address"`
+	Phone       string    `json:"phone,omitempty" spanner:"Phone"`
+	Metadata    string    `json:"metadata,omitempty" spanner:"Metadata"`
+	CreatedAt   time.Time `json:"created_at" spanner:"CreatedAt"`
+	UpdatedAt   time.Time `json:"updated_at" spanner:"UpdatedAt"`
 }
 
 // UserAgent represents a relationship between a user and an agent

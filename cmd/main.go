@@ -47,6 +47,7 @@ func main() {
 	orgHandler := handlers.NewOrganizationHandler(spannerClient)
 	agentHandler := handlers.NewAgentHandler(spannerClient)
 	fileHandler := handlers.NewFileHandler(spannerClient, storageClient)
+	userOrgHandler := handlers.NewUserOrgHandler(spannerClient)
 	userHandler := handlers.NewUserHandler(spannerClient)
 
 	// Set up Gin router
@@ -95,7 +96,25 @@ func main() {
 				files.DELETE("/:id", fileHandler.Delete)
 			}
 
-			// User routes
+			// User-Organization membership routes
+			userOrgs := protected.Group("/user-orgs")
+			{
+				userOrgs.GET("", userOrgHandler.List)
+				userOrgs.POST("", userOrgHandler.Create)
+				userOrgs.GET("/:id", userOrgHandler.Get)
+				userOrgs.PUT("/:id", userOrgHandler.Update)
+				userOrgs.DELETE("/:id", userOrgHandler.Delete)
+				userOrgs.POST("/assign", userOrgHandler.AssignToAgent)
+				
+				// Fix for route conflict - use a different route structure
+				userAgents := userOrgs.Group("/by-id/:user_id/agents")
+				{
+					userAgents.DELETE("/:agent_id", userOrgHandler.RemoveFromAgent)
+					userAgents.GET("", userOrgHandler.ListUserAgents)
+				}
+			}
+			
+			// Core user routes
 			users := protected.Group("/users")
 			{
 				users.GET("", userHandler.List)
@@ -103,14 +122,7 @@ func main() {
 				users.GET("/:id", userHandler.Get)
 				users.PUT("/:id", userHandler.Update)
 				users.DELETE("/:id", userHandler.Delete)
-				users.POST("/assign", userHandler.AssignToAgent)
-				
-				// Fix for route conflict - use a different route structure
-				userAgents := users.Group("/by-id/:user_id/agents")
-				{
-					userAgents.DELETE("/:agent_id", userHandler.RemoveFromAgent)
-					userAgents.GET("", userHandler.ListAgents)
-				}
+				users.GET("/by-email", userHandler.GetByEmail)
 			}
 		}
 	}

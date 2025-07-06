@@ -9,20 +9,20 @@ import (
 	"github.com/oregpt/agentplatform-backend-service/internal/models"
 )
 
-// UserHandler handles user-related requests
-type UserHandler struct {
+// UserOrgHandler handles user organization membership-related requests
+type UserOrgHandler struct {
 	DB *db.SpannerClient
 }
 
-// NewUserHandler creates a new user handler
-func NewUserHandler(db *db.SpannerClient) *UserHandler {
-	return &UserHandler{
+// NewUserOrgHandler creates a new user organization handler
+func NewUserOrgHandler(db *db.SpannerClient) *UserOrgHandler {
+	return &UserOrgHandler{
 		DB: db,
 	}
 }
 
-// Create creates a new user
-func (h *UserHandler) Create(c *gin.Context) {
+// Create creates a new user organization membership
+func (h *UserOrgHandler) Create(c *gin.Context) {
 	// Get org ID from context
 	orgID, exists := c.Get("org_id")
 	if !exists {
@@ -37,9 +37,9 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Create user
-	user := &models.User{
-		ID:            req.Email, // Using email as the user ID for now
+	// Create user organization membership
+	userOrg := &models.UserOrg{
+		UserID:        req.Email, // Using email as the user ID for now
 		OrganizationID: orgID.(string),
 		Email:         req.Email,
 		DisplayName:   req.DisplayName,
@@ -48,17 +48,17 @@ func (h *UserHandler) Create(c *gin.Context) {
 		UpdatedAt:     time.Now(),
 	}
 
-	// Save user
-	if err := h.DB.CreateUser(c.Request.Context(), user); err != nil {
+	// Save user organization membership
+	if err := h.DB.CreateUserOrg(c.Request.Context(), userOrg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, user)
+	c.JSON(http.StatusCreated, userOrg)
 }
 
-// Get gets a user by ID
-func (h *UserHandler) Get(c *gin.Context) {
+// Get gets a user organization membership by ID
+func (h *UserOrgHandler) Get(c *gin.Context) {
 	// Get user ID from path
 	userID := c.Param("id")
 	if userID == "" {
@@ -73,18 +73,18 @@ func (h *UserHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// Get user from database
-	user, err := h.DB.GetUser(c.Request.Context(), userID, orgID.(string))
+	// Get user organization membership from database
+	userOrg, err := h.DB.GetUserOrg(c.Request.Context(), userID, orgID.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, userOrg)
 }
 
-// List lists all users for an organization
-func (h *UserHandler) List(c *gin.Context) {
+// List lists all user organization memberships for an organization
+func (h *UserOrgHandler) List(c *gin.Context) {
 	// Check for organization_id query parameter first
 	queryOrgID := c.Query("organization_id")
 	
@@ -99,18 +99,18 @@ func (h *UserHandler) List(c *gin.Context) {
 		orgID = contextOrgID.(string)
 	}
 
-	// Get users from database
-	users, err := h.DB.ListUsers(c.Request.Context(), orgID)
+	// Get user organization memberships from database
+	userOrgs, err := h.DB.ListUserOrgs(c.Request.Context(), orgID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"users": users})
+	c.JSON(http.StatusOK, gin.H{"users": userOrgs})
 }
 
-// Update updates a user
-func (h *UserHandler) Update(c *gin.Context) {
+// Update updates a user organization membership
+func (h *UserOrgHandler) Update(c *gin.Context) {
 	// Get user ID from path
 	userID := c.Param("id")
 	if userID == "" {
@@ -132,29 +132,29 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Get user from database
-	user, err := h.DB.GetUser(c.Request.Context(), userID, orgID.(string))
+	// Get user organization membership from database
+	userOrg, err := h.DB.GetUserOrg(c.Request.Context(), userID, orgID.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Update user
-	user.DisplayName = req.DisplayName
-	user.Role = req.Role
-	user.UpdatedAt = time.Now()
+	// Update user organization membership
+	userOrg.DisplayName = req.DisplayName
+	userOrg.Role = req.Role
+	userOrg.UpdatedAt = time.Now()
 
-	// Save user
-	if err := h.DB.UpdateUser(c.Request.Context(), user); err != nil {
+	// Save user organization membership
+	if err := h.DB.UpdateUserOrg(c.Request.Context(), userOrg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, userOrg)
 }
 
-// Delete deletes a user
-func (h *UserHandler) Delete(c *gin.Context) {
+// Delete deletes a user organization membership
+func (h *UserOrgHandler) Delete(c *gin.Context) {
 	// Get user ID from path
 	userID := c.Param("id")
 	if userID == "" {
@@ -169,8 +169,8 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// Delete user from database
-	if err := h.DB.DeleteUser(c.Request.Context(), userID, orgID.(string)); err != nil {
+	// Delete user organization membership
+	if err := h.DB.DeleteUserOrg(c.Request.Context(), userID, orgID.(string)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -179,7 +179,7 @@ func (h *UserHandler) Delete(c *gin.Context) {
 }
 
 // AssignToAgent assigns a user to an agent
-func (h *UserHandler) AssignToAgent(c *gin.Context) {
+func (h *UserOrgHandler) AssignToAgent(c *gin.Context) {
 	// Get org ID from context
 	orgID, exists := c.Get("org_id")
 	if !exists {
@@ -194,10 +194,10 @@ func (h *UserHandler) AssignToAgent(c *gin.Context) {
 		return
 	}
 
-	// Verify user exists
-	_, err := h.DB.GetUser(c.Request.Context(), req.UserID, orgID.(string))
+	// Verify user organization membership exists
+	_, err := h.DB.GetUserOrg(c.Request.Context(), req.UserID, orgID.(string))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User not found"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not found in this organization"})
 		return
 	}
 
@@ -223,7 +223,7 @@ func (h *UserHandler) AssignToAgent(c *gin.Context) {
 }
 
 // RemoveFromAgent removes a user from an agent
-func (h *UserHandler) RemoveFromAgent(c *gin.Context) {
+func (h *UserOrgHandler) RemoveFromAgent(c *gin.Context) {
 	// Get user ID and agent ID from path
 	userID := c.Param("user_id")
 	if userID == "" {
@@ -253,8 +253,8 @@ func (h *UserHandler) RemoveFromAgent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "User removed from agent"})
 }
 
-// ListAgents lists all agents for a user
-func (h *UserHandler) ListAgents(c *gin.Context) {
+// ListUserAgents lists all agents for a user
+func (h *UserOrgHandler) ListUserAgents(c *gin.Context) {
 	// Get user ID from path
 	userID := c.Param("user_id")
 	if userID == "" {
