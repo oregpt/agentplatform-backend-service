@@ -85,15 +85,22 @@ func (h *UserHandler) Get(c *gin.Context) {
 
 // List lists all users for an organization
 func (h *UserHandler) List(c *gin.Context) {
-	// Get org ID from context
-	orgID, exists := c.Get("org_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
-		return
+	// Check for organization_id query parameter first
+	queryOrgID := c.Query("organization_id")
+	
+	// If no query parameter, get org ID from context
+	orgID := queryOrgID
+	if orgID == "" {
+		contextOrgID, exists := c.Get("org_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
+			return
+		}
+		orgID = contextOrgID.(string)
 	}
 
 	// Get users from database
-	users, err := h.DB.ListUsers(c.Request.Context(), orgID.(string))
+	users, err := h.DB.ListUsers(c.Request.Context(), orgID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
