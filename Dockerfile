@@ -25,7 +25,8 @@ WORKDIR /root/
 COPY --from=builder /app/backend-service .
 
 # Expose the port the service runs on
-EXPOSE 8081
+# Use the PORT environment variable that Cloud Run provides
+EXPOSE 8080
 
 # Command to run the executable
 CMD ["./backend-service"]

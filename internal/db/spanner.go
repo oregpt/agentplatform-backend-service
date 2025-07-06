@@ -87,6 +87,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 		"Files",
 		"UserOrgs",
 		"UserAgents",
+		"Users",
 	}
 	
 	// Check if all required tables exist
@@ -181,6 +182,22 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 				CreatedAt TIMESTAMP NOT NULL,
 			) PRIMARY KEY (UserID, OrganizationID, AgentID),
 			INTERLEAVE IN PARENT UserOrgs ON DELETE CASCADE
+		`)
+	}
+	
+	// Users table
+	if !existingTables["Users"] {
+		statements = append(statements, `
+			CREATE TABLE Users (
+				UserID STRING(128) NOT NULL,
+				Email STRING(255) NOT NULL,
+				DisplayName STRING(255),
+				Address STRING(MAX),
+				Phone STRING(50),
+				Metadata JSON,
+				CreatedAt TIMESTAMP NOT NULL,
+				UpdatedAt TIMESTAMP NOT NULL,
+			) PRIMARY KEY (UserID)
 		`)
 	}
 	
