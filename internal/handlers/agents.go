@@ -42,12 +42,9 @@ func (h *AgentHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Determine which organization ID to use
-	// If provided in the request, use that. Otherwise use the one from context if available.
+	// Use organization ID from context if available
 	var orgIDStr string
-	if req.OrganizationID != "" {
-		orgIDStr = req.OrganizationID
-	} else if contextOrgID != nil && contextOrgID.(string) != "" && contextOrgID.(string) != "all" {
+	if contextOrgID != nil && contextOrgID.(string) != "" && contextOrgID.(string) != "all" {
 		orgIDStr = contextOrgID.(string)
 	}
 	// Note: orgIDStr may be empty, which is now allowed
