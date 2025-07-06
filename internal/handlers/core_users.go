@@ -82,14 +82,32 @@ func (h *UserHandler) GetByEmail(c *gin.Context) {
 
 // List lists all users
 func (h *UserHandler) List(c *gin.Context) {
-	// List users from database
+	// Check for organization_id query parameter first
+	queryOrgID := c.Query("organization_id")
+	
+	// If organization_id is provided, we need to filter users by organization membership
+	if queryOrgID != "" {
+		// Get user organization memberships from database
+		userOrgs, err := h.DB.ListUserOrgs(c.Request.Context(), queryOrgID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Return user organization memberships in the expected format
+		c.JSON(http.StatusOK, gin.H{"users": userOrgs})
+		return
+	}
+	
+	// If no organization_id is provided, return all users (core user records)
 	users, err := h.DB.ListUsers(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, users)
+	// Return users in the expected format
+	c.JSON(http.StatusOK, gin.H{"users": users})
 }
 
 // Update updates a user

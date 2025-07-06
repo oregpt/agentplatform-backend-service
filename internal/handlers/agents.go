@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -102,7 +103,32 @@ func (h *AgentHandler) List(c *gin.Context) {
 	// Check for organization_id query parameter first
 	queryOrgID := c.Query("organization_id")
 	
-	// If no query parameter, get org ID from context
+	// Special case: if queryOrgID is "All", list agents from all organizations
+	if queryOrgID == "All" {
+		// Get all organizations
+		orgs, err := h.DB.ListOrganizations(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Collect agents from all organizations
+		allAgents := []*models.Agent{}
+		for _, org := range orgs {
+			agents, err := h.DB.ListAgents(c.Request.Context(), org.ID)
+			if err != nil {
+				// Log error but continue with other organizations
+				log.Printf("Error listing agents for organization %s: %v", org.ID, err)
+				continue
+			}
+			allAgents = append(allAgents, agents...)
+		}
+		
+		c.JSON(http.StatusOK, gin.H{"agents": allAgents})
+		return
+	}
+	
+	// If no query parameter or not "All", get org ID from context or use provided ID
 	orgID := queryOrgID
 	if orgID == "" {
 		contextOrgID, exists := c.Get("org_id")
@@ -113,7 +139,7 @@ func (h *AgentHandler) List(c *gin.Context) {
 		orgID = contextOrgID.(string)
 	}
 
-	// Get agents from database
+	// Get agents from database for specific organization
 	agents, err := h.DB.ListAgents(c.Request.Context(), orgID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
