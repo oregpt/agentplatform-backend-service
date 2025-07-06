@@ -349,9 +349,9 @@ func (s *SpannerClient) DeleteOrganization(ctx context.Context, orgID string) er
 
 // CreateAgent creates a new agent
 func (s *SpannerClient) CreateAgent(ctx context.Context, agent *models.Agent) error {
-	mutation := spanner.InsertOrUpdateMap("Agents", map[string]interface{}{
+	// Create a map for the agent data
+	agentData := map[string]interface{}{
 		"AgentID":        agent.ID,
-		"OrganizationID": agent.OrganizationID,
 		"Name":           agent.Name,
 		"Description":    agent.Description,
 		"Instructions":   agent.Instructions,
@@ -359,7 +359,17 @@ func (s *SpannerClient) CreateAgent(ctx context.Context, agent *models.Agent) er
 		"CreatedBy":      agent.CreatedBy,
 		"CreatedAt":      agent.CreatedAt,
 		"UpdatedAt":      agent.UpdatedAt,
-	})
+	}
+	
+	// Only include OrganizationID if it's not empty
+	if agent.OrganizationID != "" {
+		agentData["OrganizationID"] = agent.OrganizationID
+	} else {
+		// Set OrganizationID to NULL explicitly
+		agentData["OrganizationID"] = nil
+	}
+	
+	mutation := spanner.InsertOrUpdateMap("Agents", agentData)
 	
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err

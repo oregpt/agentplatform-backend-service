@@ -25,18 +25,15 @@ func NewAgentHandler(db *db.SpannerClient) *AgentHandler {
 
 // Create creates a new agent
 func (h *AgentHandler) Create(c *gin.Context) {
-	// Get user ID and org ID from context
+	// Get user ID from context
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
 		return
 	}
 	
-	orgID, exists := c.Get("org_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
-		return
-	}
+	// Get org ID from context (used as default if not specified in request)
+	contextOrgID, _ := c.Get("org_id")
 
 	// Parse request body
 	var req models.CreateAgentRequest
@@ -45,9 +42,15 @@ func (h *AgentHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Override organization_id from the request with the one from the context
-	// This ensures the agent is created in the correct organization
-	orgIDStr := orgID.(string)
+	// Determine which organization ID to use
+	// If provided in the request, use that. Otherwise use the one from context if available.
+	var orgIDStr string
+	if req.OrganizationID != "" {
+		orgIDStr = req.OrganizationID
+	} else if contextOrgID != nil && contextOrgID.(string) != "" && contextOrgID.(string) != "all" {
+		orgIDStr = contextOrgID.(string)
+	}
+	// Note: orgIDStr may be empty, which is now allowed
 	
 	// Create agent
 	agent := &models.Agent{
@@ -62,29 +65,38 @@ func (h *AgentHandler) Create(c *gin.Context) {
 		UpdatedAt:     time.Now(),
 	}
 
+	// Log the agent creation attempt
+	log.Printf("Creating agent with ID: %s, Name: %s, OrganizationID: %s", agent.ID, agent.Name, agent.OrganizationID)
+
 	// Save agent
 	if err := h.DB.CreateAgent(c.Request.Context(), agent); err != nil {
+		log.Printf("Error creating agent: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Create UserAgent record to automatically assign the creator to the agent
-	userAgent := &models.UserAgent{
-		OrganizationID: orgIDStr,
-		UserID:         userID.(string),
-		AgentID:        agent.ID,
-		CreatedAt:      time.Now(),
-	}
+	// If we have an organization ID, create a UserAgent record to link the agent to the user and organization
+	if orgIDStr != "" {
+		userAgent := &models.UserAgent{
+			OrganizationID: orgIDStr,
+			UserID:         userID.(string),
+			AgentID:        agent.ID,
+			CreatedAt:      time.Now(),
+		}
 
-	// Save UserAgent record
-	if err := h.DB.CreateUserAgent(c.Request.Context(), userAgent); err != nil {
-		// Log the error but don't fail the request since the agent was created successfully
-		log.Printf("Warning: Agent created but failed to assign creator: %v", err)
-		c.JSON(http.StatusCreated, gin.H{
-			"agent":   agent,
-			"warning": "Agent created but failed to assign creator: " + err.Error(),
-		})
-		return
+		// Save UserAgent record
+		if err := h.DB.CreateUserAgent(c.Request.Context(), userAgent); err != nil {
+			// Log the error but don't fail the request since the agent was created successfully
+			log.Printf("Warning: Agent created but failed to assign creator: %v", err)
+			c.JSON(http.StatusCreated, gin.H{
+				"agent":   agent,
+				"warning": "Agent created but failed to assign creator: " + err.Error(),
+			})
+			return
+		}
+	} else {
+		// If no organization was specified, we can't create a UserAgent record
+		log.Printf("Warning: Agent created without organization ID, no UserAgent record created")
 	}
 
 	c.JSON(http.StatusCreated, agent)
@@ -123,28 +135,46 @@ func (h *AgentHandler) Get(c *gin.Context) {
 
 // List lists all agents for an organization
 func (h *AgentHandler) List(c *gin.Context) {
+	// Get user ID from context for filtering by user access
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		return
+	}
+	userIDStr := userID.(string)
+
 	// Check for organization_id query parameter first
 	queryOrgID := c.Query("organization_id")
 	
-	// Special case: if queryOrgID is "All", list agents from all organizations
+	// Special case: if queryOrgID is "All", list agents from all organizations the user has access to
 	if queryOrgID == "All" {
-		// Get all organizations
-		orgs, err := h.DB.ListOrganizations(c.Request.Context())
+		// Get all organizations the user has access to
+		userOrgs, err := h.DB.ListUserOrganizations(c.Request.Context(), userIDStr)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list user organizations: " + err.Error()})
 			return
 		}
 		
-		// Collect agents from all organizations
+		// Collect agents from all organizations the user has access to
 		allAgents := []*models.Agent{}
-		for _, org := range orgs {
-			agents, err := h.DB.ListAgents(c.Request.Context(), org.ID)
+		for _, userOrg := range userOrgs {
+			// Get agent IDs for this user and organization from UserAgents table
+			agentIDs, err := h.DB.ListUserAgents(c.Request.Context(), userIDStr, userOrg.OrganizationID)
 			if err != nil {
 				// Log error but continue with other organizations
-				log.Printf("Error listing agents for organization %s: %v", org.ID, err)
+				log.Printf("Error listing agent IDs for user %s in organization %s: %v", userIDStr, userOrg.OrganizationID, err)
 				continue
 			}
-			allAgents = append(allAgents, agents...)
+			
+			// Get full agent details for each agent ID
+			for _, agentID := range agentIDs {
+				agent, err := h.DB.GetAgent(c.Request.Context(), agentID)
+				if err != nil {
+					log.Printf("Error getting agent %s: %v", agentID, err)
+					continue
+				}
+				allAgents = append(allAgents, agent)
+			}
 		}
 		
 		c.JSON(http.StatusOK, gin.H{"agents": allAgents})
@@ -162,11 +192,22 @@ func (h *AgentHandler) List(c *gin.Context) {
 		orgID = contextOrgID.(string)
 	}
 
-	// Get agents from database for specific organization
-	agents, err := h.DB.ListAgents(c.Request.Context(), orgID)
+	// Get agent IDs for this user and organization from UserAgents table
+	agentIDs, err := h.DB.ListUserAgents(c.Request.Context(), userIDStr, orgID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list user agents: " + err.Error()})
 		return
+	}
+	
+	// Get full agent details for each agent ID
+	agents := []*models.Agent{}
+	for _, agentID := range agentIDs {
+		agent, err := h.DB.GetAgent(c.Request.Context(), agentID)
+		if err != nil {
+			log.Printf("Error getting agent %s: %v", agentID, err)
+			continue
+		}
+		agents = append(agents, agent)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"agents": agents})
