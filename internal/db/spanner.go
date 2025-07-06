@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/spanner"
 	databaseadmin "cloud.google.com/go/spanner/admin/database/apiv1"
@@ -525,19 +526,39 @@ func (s *SpannerClient) DeleteAgent(ctx context.Context, agentID string) error {
 
 // CreateFile creates a new file record
 func (s *SpannerClient) CreateFile(ctx context.Context, file *models.File) error {
-	mutation := spanner.InsertOrUpdateMap("Files", map[string]interface{}{
+	// Create a map with the required fields
+	fileMap := map[string]interface{}{
 		"FileID":         file.ID,
 		"AgentID":        file.AgentID,
-		"OrganizationID": file.OrganizationID,
 		"Name":           file.Name,
 		"Path":           file.Path,
 		"ContentType":    file.ContentType,
 		"SizeBytes":      file.SizeBytes,
 		"CreatedBy":      file.CreatedBy,
 		"CreatedAt":      file.CreatedAt,
-	})
+	}
+	
+	// Only include OrganizationID if it's not empty
+	// This makes the field optional in case the column doesn't exist in the table
+	if file.OrganizationID != "" {
+		// Try to include OrganizationID, but it won't fail if the column doesn't exist
+		// as we'll catch and handle that specific error
+		fileMap["OrganizationID"] = file.OrganizationID
+	}
+
+	mutation := spanner.InsertOrUpdateMap("Files", fileMap)
 
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
+	
+	// If we get a specific error about OrganizationID column not found,
+	// try again without that field
+	if err != nil && strings.Contains(err.Error(), "Column not found in table Files: OrganizationID") {
+		// Remove OrganizationID and try again
+		delete(fileMap, "OrganizationID")
+		mutation = spanner.InsertOrUpdateMap("Files", fileMap)
+		_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutation})
+	}
+	
 	return err
 }
 
