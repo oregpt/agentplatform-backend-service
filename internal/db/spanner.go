@@ -842,17 +842,17 @@ func (s *SpannerClient) RemoveUserFromAgent(ctx context.Context, userID, orgID, 
 	return err
 }
 
-// ListUserAgents lists all agents for a user
-func (s *SpannerClient) ListUserAgents(ctx context.Context, userID, orgID string) ([]string, error) {
-	stmt := spanner.Statement{
-		SQL: `SELECT AgentID FROM UserAgents WHERE OrganizationID = @orgID AND UserID = @userID`,
+// ListUserAgents lists all agents for a user in an organization
+func (s *SpannerClient) ListUserAgents(ctx context.Context, userID string, organizationID string) ([]string, error) {
+	query := spanner.Statement{
+		SQL: `SELECT AgentID FROM UserAgents WHERE UserID = @userID AND OrganizationID = @organizationID`,
 		Params: map[string]interface{}{
-			"orgID":  orgID,
 			"userID": userID,
+			"organizationID": organizationID,
 		},
 	}
 
-	iter := s.Client.Single().Query(ctx, stmt)
+	iter := s.Client.Single().Query(ctx, query)
 	defer iter.Stop()
 
 	var agentIDs []string
@@ -866,7 +866,7 @@ func (s *SpannerClient) ListUserAgents(ctx context.Context, userID, orgID string
 		}
 
 		var agentID string
-		if err := row.Column(0, &agentID); err != nil {
+		if err := row.Columns(&agentID); err != nil {
 			return nil, err
 		}
 
@@ -874,4 +874,42 @@ func (s *SpannerClient) ListUserAgents(ctx context.Context, userID, orgID string
 	}
 
 	return agentIDs, nil
+}
+
+// GetUsersByAgent gets all users assigned to a specific agent
+func (s *SpannerClient) GetUsersByAgent(ctx context.Context, agentID string) ([]models.UserAgentMapping, error) {
+	// Query to get all UserAgent records for this agent
+	query := spanner.Statement{
+		SQL: `SELECT UserID, OrganizationID FROM UserAgents WHERE AgentID = @agentID`,
+		Params: map[string]interface{}{
+			"agentID": agentID,
+		},
+	}
+
+	iter := s.Client.Single().Query(ctx, query)
+	defer iter.Stop()
+
+	var userAgentMappings []models.UserAgentMapping
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var userID, organizationID string
+		if err := row.Columns(&userID, &organizationID); err != nil {
+			return nil, err
+		}
+
+		userAgentMappings = append(userAgentMappings, models.UserAgentMapping{
+			UserID:         userID,
+			OrganizationID: organizationID,
+			AgentID:        agentID,
+		})
+	}
+
+	return userAgentMappings, nil
 }

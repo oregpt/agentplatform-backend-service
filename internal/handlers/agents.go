@@ -304,6 +304,44 @@ func (h *AgentHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, agent)
 }
 
+// GetUsers gets all users assigned to a specific agent
+func (h *AgentHandler) GetUsers(c *gin.Context) {
+	// Get agent ID from path
+	agentID := c.Param("id")
+	if agentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Agent ID is required"})
+		return
+	}
+
+	// Get user ID from context
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		return
+	}
+
+	// Check if user has access to this agent via UserAgent mappings
+	hasAccess, err := h.DB.CheckUserAgentAccess(c.Request.Context(), userIDStr.(string), agentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking user access: " + err.Error()})
+		return
+	}
+
+	if !hasAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have access to this agent"})
+		return
+	}
+
+	// Get all users assigned to this agent
+	userAgentMappings, err := h.DB.GetUsersByAgent(c.Request.Context(), agentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users for agent: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, userAgentMappings)
+}
+
 // Delete deletes an agent and all related UserAgent records
 func (h *AgentHandler) Delete(c *gin.Context) {
 	// Get agent ID from path

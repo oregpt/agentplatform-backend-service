@@ -71,6 +71,13 @@ type UserAgent struct {
 	CreatedAt      time.Time `json:"created_at" spanner:"CreatedAt"`
 }
 
+// UserAgentMapping represents a simplified user-agent relationship for API responses
+type UserAgentMapping struct {
+	UserID         string `json:"userId"`
+	OrganizationID string `json:"organizationId"`
+	AgentID        string `json:"agentId"`
+}
+
 // CreateOrganizationRequest represents a request to create an organization
 type CreateOrganizationRequest struct {
 	Name        string `json:"name" binding:"required"`

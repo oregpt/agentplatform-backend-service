@@ -84,6 +84,7 @@ func main() {
 				agents.GET("/:id", agentHandler.Get)
 				agents.PUT("/:id", agentHandler.Update)
 				agents.DELETE("/:id", agentHandler.Delete)
+				agents.GET("/:id/users", agentHandler.GetUsers)
 			}
 
 			// File routes
