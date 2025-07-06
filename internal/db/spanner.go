@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/spanner"
 	databaseadmin "cloud.google.com/go/spanner/admin/database/apiv1"
