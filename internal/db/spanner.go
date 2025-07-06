@@ -494,6 +494,40 @@ func (s *SpannerClient) ListFiles(ctx context.Context, agentID string) ([]*model
 	return files, nil
 }
 
+// ListFilesByOrganizationID lists all files for an organization
+func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizationID string) ([]*models.File, error) {
+	stmt := spanner.Statement{
+		SQL: `SELECT FileID, AgentID, OrganizationID, Name, Path, ContentType, 
+			  SizeBytes, CreatedBy, CreatedAt FROM Files WHERE OrganizationID = @organizationID`,
+		Params: map[string]interface{}{
+			"organizationID": organizationID,
+		},
+	}
+	
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+	
+	var files []*models.File
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		
+		var file models.File
+		if err := row.ToStruct(&file); err != nil {
+			return nil, err
+		}
+		
+		files = append(files, &file)
+	}
+	
+	return files, nil
+}
+
 // DeleteFile deletes a file record
 func (s *SpannerClient) DeleteFile(ctx context.Context, fileID string) error {
 	mutation := spanner.Delete("Files", spanner.Key{fileID})

@@ -89,6 +89,7 @@ func main() {
 			files := protected.Group("/files")
 			{
 				files.GET("/agent/:agent_id", fileHandler.List)
+				files.GET("/organization", fileHandler.ListByOrganization)
 				files.POST("/agent/:agent_id", fileHandler.Upload)
 				files.GET("/:id", fileHandler.Get)
 				files.DELETE("/:id", fileHandler.Delete)

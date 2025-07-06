@@ -186,6 +186,32 @@ func (h *FileHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"files": files})
 }
 
+// ListByOrganization lists all files for an organization
+func (h *FileHandler) ListByOrganization(c *gin.Context) {
+	// Check for organization_id query parameter first
+	queryOrgID := c.Query("organization_id")
+	
+	// If no query parameter, get org ID from context
+	orgID := queryOrgID
+	if orgID == "" {
+		contextOrgID, exists := c.Get("org_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
+			return
+		}
+		orgID = contextOrgID.(string)
+	}
+
+	// Get files from database
+	files, err := h.DB.ListFilesByOrganizationID(c.Request.Context(), orgID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to list files: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
 // Delete deletes a file
 func (h *FileHandler) Delete(c *gin.Context) {
 	// Get file ID from path
