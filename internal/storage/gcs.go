@@ -37,33 +37,51 @@ func (g *GCSClient) Close() error {
 
 // UploadFile uploads a file to Google Cloud Storage
 func (g *GCSClient) UploadFile(ctx context.Context, orgID, agentID, fileName string, contentType string, fileSize int64, content io.Reader) (*models.File, error) {
+	// Log upload parameters
+	fmt.Printf("[GCS Upload] Starting file upload - Organization ID: %s, Agent ID: %s, File Name: %s\n", orgID, agentID, fileName)
+	fmt.Printf("[GCS Upload] Content Type: %s, File Size: %d bytes\n", contentType, fileSize)
+	fmt.Printf("[GCS Upload] Target GCS Bucket: %s\n", g.BucketName)
+	
 	// Generate a unique file ID
 	fileID := uuid.New().String()
+	fmt.Printf("[GCS Upload] Generated File ID: %s\n", fileID)
 
 	// Create a path for the file
 	path := fmt.Sprintf("%s/%s/%s", orgID, agentID, fileID)
+	fmt.Printf("[GCS Upload] Target GCS Path: %s\n", path)
 
 	// Get a handle to the bucket
 	bucket := g.Client.Bucket(g.BucketName)
+	fmt.Printf("[GCS Upload] Got bucket handle for: %s\n", g.BucketName)
 
 	// Get a handle to the object
 	obj := bucket.Object(path)
+	fmt.Printf("[GCS Upload] Created object handle for path: %s\n", path)
 
 	// Create a writer
 	w := obj.NewWriter(ctx)
 	w.ContentType = contentType
+	fmt.Printf("[GCS Upload] Created writer with content type: %s\n", contentType)
 
 	// Copy the file data to the GCS object
-	if _, err := io.Copy(w, content); err != nil {
+	fmt.Printf("[GCS Upload] Starting to copy file data to GCS...\n")
+	bytesWritten, err := io.Copy(w, content)
+	if err != nil {
+		fmt.Printf("[GCS Upload] ERROR: Failed to copy file to GCS: %v\n", err)
 		return nil, fmt.Errorf("failed to copy file to GCS: %v", err)
 	}
+	fmt.Printf("[GCS Upload] Successfully copied %d bytes to GCS\n", bytesWritten)
 
 	// Close the writer
+	fmt.Printf("[GCS Upload] Closing writer...\n")
 	if err := w.Close(); err != nil {
+		fmt.Printf("[GCS Upload] ERROR: Failed to close writer: %v\n", err)
 		return nil, fmt.Errorf("failed to close writer: %v", err)
 	}
+	fmt.Printf("[GCS Upload] Writer closed successfully\n")
 
 	// Create a file record
+	fmt.Printf("[GCS Upload] Creating file record in memory...\n")
 	file := &models.File{
 		ID:            fileID,
 		AgentID:       agentID,
@@ -75,6 +93,9 @@ func (g *GCSClient) UploadFile(ctx context.Context, orgID, agentID, fileName str
 		CreatedBy:     "system", // This should be replaced with the actual user ID
 		CreatedAt:     time.Now(),
 	}
+	fmt.Printf("[GCS Upload] File record created: ID=%s, Path=%s, Organization=%s, Agent=%s\n", 
+		file.ID, file.Path, file.OrganizationID, file.AgentID)
+	fmt.Printf("[GCS Upload] Upload completed successfully\n")
 
 	return file, nil
 }

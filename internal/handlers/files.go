@@ -26,53 +26,76 @@ func NewFileHandler(db *db.SpannerClient, storage *storage.GCSClient) *FileHandl
 
 // Upload uploads a file
 func (h *FileHandler) Upload(c *gin.Context) {
+	fmt.Println("[File Upload] Starting file upload handler")
+	
 	// Get user ID and org ID from context
 	userID, exists := c.Get("user_id")
 	if !exists {
+		fmt.Println("[File Upload] ERROR: User ID not found in context")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
 		return
 	}
+	fmt.Printf("[File Upload] User ID from context: %s\n", userID)
 
 	orgID, exists := c.Get("org_id")
 	if !exists {
+		fmt.Println("[File Upload] ERROR: Organization ID not found in context")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
 		return
 	}
+	fmt.Printf("[File Upload] Organization ID from context: %s\n", orgID)
 
 	// Get agent ID from path
 	agentID := c.Param("agent_id")
 	if agentID == "" {
+		fmt.Println("[File Upload] ERROR: Agent ID is missing from request path")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Agent ID is required"})
 		return
 	}
+	fmt.Printf("[File Upload] Agent ID from path: %s\n", agentID)
 
 	// Get agent from database to verify it belongs to the organization
+	fmt.Printf("[File Upload] Fetching agent %s from database to verify organization...\n", agentID)
 	agent, err := h.DB.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
+		fmt.Printf("[File Upload] ERROR: Failed to get agent %s: %v\n", agentID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get agent: %v", err)})
 		return
 	}
+	fmt.Printf("[File Upload] Agent found: ID=%s, Organization=%s\n", agent.ID, agent.OrganizationID)
 
+	// Verify agent belongs to the organization
 	if agent.OrganizationID != orgID.(string) {
+		fmt.Printf("[File Upload] ERROR: Agent organization mismatch. Agent org: %s, Request org: %s\n", 
+			agent.OrganizationID, orgID.(string))
 		c.JSON(http.StatusForbidden, gin.H{"error": "Agent does not belong to your organization"})
 		return
 	}
+	fmt.Println("[File Upload] Agent organization verification successful")
 
 	// Get file from form
+	fmt.Println("[File Upload] Getting file from form data...")
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
+		fmt.Printf("[File Upload] ERROR: Failed to get file from form: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to get file: %v", err)})
 		return
 	}
 	defer file.Close()
+	fmt.Printf("[File Upload] File received: %s, Size: %d bytes, Content-Type: %s\n", 
+		header.Filename, header.Size, header.Header.Get("Content-Type"))
 
 	// Check if file is a markdown file
+	fmt.Println("[File Upload] Validating file type...")
 	if header.Header.Get("Content-Type") != "text/markdown" && header.Filename[len(header.Filename)-3:] != ".md" {
+		fmt.Printf("[File Upload] ERROR: Invalid file type: %s\n", header.Header.Get("Content-Type"))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Only markdown files are allowed"})
 		return
 	}
+	fmt.Println("[File Upload] File type validation successful")
 
 	// Upload file to GCS
+	fmt.Println("[File Upload] Starting upload to Google Cloud Storage...")
 	uploadedFile, err := h.Storage.UploadFile(
 		c.Request.Context(),
 		orgID.(string),
@@ -83,21 +106,29 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		file,
 	)
 	if err != nil {
+		fmt.Printf("[File Upload] ERROR: Failed to upload file to GCS: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to upload file: %v", err)})
 		return
 	}
+	fmt.Printf("[File Upload] File successfully uploaded to GCS: %s\n", uploadedFile.Path)
 
 	// Set the user ID as the creator
+	fmt.Printf("[File Upload] Setting creator user ID: %s\n", userID.(string))
 	uploadedFile.CreatedBy = userID.(string)
 
 	// Save file record to database
+	fmt.Println("[File Upload] Saving file record to database...")
 	if err := h.DB.CreateFile(c.Request.Context(), uploadedFile); err != nil {
+		fmt.Printf("[File Upload] ERROR: Failed to save file record to database: %v\n", err)
 		// Try to delete the file from GCS if database operation fails
+		fmt.Printf("[File Upload] Attempting to delete file from GCS: %s\n", uploadedFile.Path)
 		_ = h.Storage.DeleteFile(c.Request.Context(), uploadedFile.Path)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save file record: %v", err)})
 		return
 	}
+	fmt.Println("[File Upload] File record successfully saved to database")
 
+	fmt.Println("[File Upload] File upload process completed successfully")
 	c.JSON(http.StatusCreated, uploadedFile)
 }
 
