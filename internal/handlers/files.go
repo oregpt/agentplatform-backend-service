@@ -103,6 +103,8 @@ func (h *FileHandler) Upload(c *gin.Context) {
 
 	// Upload file to GCS
 	fmt.Println("[File Upload] Starting upload to Google Cloud Storage...")
+	// We'll still pass the orgID for metadata purposes, but the storage client
+	// no longer uses it for the file path
 	uploadedFile, err := h.Storage.UploadFile(
 		c.Request.Context(),
 		orgID.(string),

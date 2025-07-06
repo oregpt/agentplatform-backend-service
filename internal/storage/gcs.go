@@ -46,8 +46,9 @@ func (g *GCSClient) UploadFile(ctx context.Context, orgID, agentID, fileName str
 	fileID := uuid.New().String()
 	fmt.Printf("[GCS Upload] Generated File ID: %s\n", fileID)
 
-	// Create a path for the file
-	path := fmt.Sprintf("%s/%s/%s", orgID, agentID, fileID)
+	// Create a path for the file - using only agent ID since agents can be cross-organization
+	// Format: agents/{agentID}/{fileID}
+	path := fmt.Sprintf("agents/%s/%s", agentID, fileID)
 	fmt.Printf("[GCS Upload] Target GCS Path: %s\n", path)
 
 	// Get a handle to the bucket
