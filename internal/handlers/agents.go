@@ -99,15 +99,22 @@ func (h *AgentHandler) Get(c *gin.Context) {
 
 // List lists all agents for an organization
 func (h *AgentHandler) List(c *gin.Context) {
-	// Get org ID from context
-	orgID, exists := c.Get("org_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
-		return
+	// Check for organization_id query parameter first
+	queryOrgID := c.Query("organization_id")
+	
+	// If no query parameter, get org ID from context
+	orgID := queryOrgID
+	if orgID == "" {
+		contextOrgID, exists := c.Get("org_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
+			return
+		}
+		orgID = contextOrgID.(string)
 	}
 
 	// Get agents from database
-	agents, err := h.DB.ListAgents(c.Request.Context(), orgID.(string))
+	agents, err := h.DB.ListAgents(c.Request.Context(), orgID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
