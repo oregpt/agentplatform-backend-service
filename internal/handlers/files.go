@@ -197,32 +197,40 @@ func (h *FileHandler) List(c *gin.Context) {
 		return
 	}
 
-	// Get agent from database to verify it belongs to the organization
-	agent, err := h.DB.GetAgent(c.Request.Context(), agentID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get agent: %v", err)})
-		return
-	}
-
-	// Check if agent belongs to the user's organization
-	orgID, exists := c.Get("org_id")
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		return
+	}
+	userIDStr := userID.(string)
+	
+	// Log access attempt
+	fmt.Printf("[Files List] User %s attempting to access files for agent %s\n", userIDStr, agentID)
+
+	// Check if user has access to this agent via UserAgent mappings
+	hasAccess, err := h.DB.CheckUserAgentAccess(c.Request.Context(), userIDStr, agentID)
+	if err != nil {
+		fmt.Printf("[Files List] Error checking user access: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check user access: " + err.Error()})
 		return
 	}
 
-	if agent.OrganizationID != orgID.(string) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Agent does not belong to your organization"})
+	if !hasAccess {
+		fmt.Printf("[Files List] Access denied for user %s to agent %s\n", userIDStr, agentID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have access to this agent's files"})
 		return
 	}
 
 	// Get files from database
 	files, err := h.DB.ListFiles(c.Request.Context(), agentID)
 	if err != nil {
+		fmt.Printf("[Files List] Error listing files: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to list files: %v", err)})
 		return
 	}
 
+	fmt.Printf("[Files List] Successfully retrieved %d files for agent %s\n", len(files), agentID)
 	c.JSON(http.StatusOK, gin.H{"files": files})
 }
 

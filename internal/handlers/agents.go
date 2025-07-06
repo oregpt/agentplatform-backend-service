@@ -122,25 +122,40 @@ func (h *AgentHandler) Get(c *gin.Context) {
 		return
 	}
 
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		return
+	}
+	userIDStr := userID.(string)
+	
+	// Log access attempt
+	fmt.Printf("[Agent Get] User %s attempting to access agent %s\n", userIDStr, agentID)
+
+	// Check if user has access to this agent via UserAgent mappings
+	hasAccess, err := h.DB.CheckUserAgentAccess(c.Request.Context(), userIDStr, agentID)
+	if err != nil {
+		fmt.Printf("[Agent Get] Error checking user access: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check user access: " + err.Error()})
+		return
+	}
+
+	if !hasAccess {
+		fmt.Printf("[Agent Get] Access denied for user %s to agent %s\n", userIDStr, agentID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have access to this agent"})
+		return
+	}
+
 	// Get agent from database
 	agent, err := h.DB.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
+		fmt.Printf("[Agent Get] Error getting agent: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Check if agent belongs to the user's organization
-	orgID, exists := c.Get("org_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
-		return
-	}
-	
-	if agent.OrganizationID != orgID.(string) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Agent does not belong to your organization"})
-		return
-	}
-
+	fmt.Printf("[Agent Get] Successfully retrieved agent %s for user %s\n", agentID, userIDStr)
 	c.JSON(http.StatusOK, agent)
 }
 
