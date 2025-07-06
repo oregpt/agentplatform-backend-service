@@ -37,15 +37,23 @@ func (h *UserOrgHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Generate a UUID for the user if not provided
+	userID := req.UserID
+	if userID == "" {
+		// If no UserID is provided, we'll use the email as a unique identifier
+		// This should be consistent with how user IDs are generated in the core_users.go handler
+		userID = req.Email
+	}
+
 	// Create user organization membership
 	userOrg := &models.UserOrg{
-		UserID:        req.Email, // Using email as the user ID for now
+		UserID:         userID,
 		OrganizationID: orgID.(string),
-		Email:         req.Email,
-		DisplayName:   req.DisplayName,
-		Role:          req.Role,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		Email:          req.Email,
+		DisplayName:    req.DisplayName,
+		Role:           req.Role,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 
 	// Save user organization membership

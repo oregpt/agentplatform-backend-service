@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -32,6 +33,19 @@ func (h *UserHandler) Create(c *gin.Context) {
 	now := time.Now()
 	req.CreatedAt = now
 	req.UpdatedAt = now
+
+	// Ensure Metadata is valid JSON
+	if req.Metadata == "" {
+		// Set default empty JSON object if metadata is empty
+		req.Metadata = "{}"
+	} else {
+		// Validate that metadata is valid JSON
+		var js map[string]interface{}
+		if err := json.Unmarshal([]byte(req.Metadata), &js); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON in metadata field: " + err.Error()})
+			return
+		}
+	}
 
 	// Create user
 	if err := h.DB.CreateUser(c.Request.Context(), &req); err != nil {
