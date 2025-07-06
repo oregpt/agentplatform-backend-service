@@ -36,9 +36,9 @@ func (g *GCSClient) Close() error {
 }
 
 // UploadFile uploads a file to Google Cloud Storage
-func (g *GCSClient) UploadFile(ctx context.Context, orgID, agentID, fileName string, contentType string, fileSize int64, content io.Reader) (*models.File, error) {
+func (g *GCSClient) UploadFile(ctx context.Context, agentID, fileName string, contentType string, fileSize int64, content io.Reader) (*models.File, error) {
 	// Log upload parameters
-	fmt.Printf("[GCS Upload] Starting file upload - Organization ID: %s, Agent ID: %s, File Name: %s\n", orgID, agentID, fileName)
+	fmt.Printf("[GCS Upload] Starting file upload - Agent ID: %s, File Name: %s\n", agentID, fileName)
 	fmt.Printf("[GCS Upload] Content Type: %s, File Size: %d bytes\n", contentType, fileSize)
 	fmt.Printf("[GCS Upload] Target GCS Bucket: %s\n", g.BucketName)
 	
@@ -84,18 +84,17 @@ func (g *GCSClient) UploadFile(ctx context.Context, orgID, agentID, fileName str
 	// Create a file record
 	fmt.Printf("[GCS Upload] Creating file record in memory...\n")
 	file := &models.File{
-		ID:            fileID,
-		AgentID:       agentID,
-		OrganizationID: orgID,
-		Name:          fileName,
-		Path:          path,
-		ContentType:   contentType,
-		SizeBytes:     fileSize,
-		CreatedBy:     "system", // This should be replaced with the actual user ID
-		CreatedAt:     time.Now(),
+		ID:          fileID,
+		AgentID:     agentID,
+		Name:        fileName,
+		Path:        path,
+		ContentType: contentType,
+		SizeBytes:   fileSize,
+		CreatedBy:   "system", // This should be replaced with the actual user ID
+		CreatedAt:   time.Now(),
 	}
-	fmt.Printf("[GCS Upload] File record created: ID=%s, Path=%s, Organization=%s, Agent=%s\n", 
-		file.ID, file.Path, file.OrganizationID, file.AgentID)
+	fmt.Printf("[GCS Upload] File record created: ID=%s, Path=%s, Agent=%s\n", 
+		file.ID, file.Path, file.AgentID)
 	fmt.Printf("[GCS Upload] Upload completed successfully\n")
 
 	return file, nil
@@ -135,9 +134,9 @@ func (g *GCSClient) DeleteFile(ctx context.Context, path string) error {
 }
 
 // ListFiles lists all files in a directory
-func (g *GCSClient) ListFiles(ctx context.Context, orgID, agentID string) ([]*storage.ObjectAttrs, error) {
+func (g *GCSClient) ListFiles(ctx context.Context, agentID string) ([]*storage.ObjectAttrs, error) {
 	// Create a path for the directory
-	path := fmt.Sprintf("%s/%s/", orgID, agentID)
+	path := fmt.Sprintf("agents/%s/", agentID)
 
 	// Get a handle to the bucket
 	bucket := g.Client.Bucket(g.BucketName)

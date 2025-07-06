@@ -104,33 +104,42 @@ func (h *FileHandler) Upload(c *gin.Context) {
 
 	// Upload file to GCS
 	fmt.Println("[File Upload] Starting upload to Google Cloud Storage...")
-	fileModel, err := h.Storage.UploadFile(c.Request.Context(), agentID, header.Filename, header.Header.Get("Content-Type"), header.Size, file)
+	// We'll still pass the orgID for metadata purposes, but the storage client
+	// no longer uses it for the file path
+	uploadedFile, err := h.Storage.UploadFile(
+		c.Request.Context(),
+		orgID.(string),
+		agentID,
+		header.Filename,
+		header.Header.Get("Content-Type"),
+		header.Size,
+		file,
+	)
 	if err != nil {
 		fmt.Printf("[File Upload] ERROR: Failed to upload file to GCS: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to upload file: %v", err)})
 		return
 	}
-	fmt.Printf("[File Upload] File uploaded to GCS: ID=%s, Path=%s\n", fileModel.ID, fileModel.Path)
+	fmt.Printf("[File Upload] File successfully uploaded to GCS: %s\n", uploadedFile.Path)
 
-	// Set the created by field to the actual user ID
-	fileModel.CreatedBy = userID.(string)
+	// Set the user ID as the creator
+	fmt.Printf("[File Upload] Setting creator user ID: %s\n", userID.(string))
+	uploadedFile.CreatedBy = userID.(string)
 
-	// Create file record in database
-	fmt.Println("[File Upload] Creating file record in database...")
-	err = h.DB.CreateFile(c.Request.Context(), fileModel)
-	if err != nil {
-		fmt.Printf("[File Upload] ERROR: Failed to create file record: %v\n", err)
-		// Try to clean up the uploaded file in GCS
-		deleteErr := h.Storage.DeleteFile(c.Request.Context(), fileModel.Path)
-		if deleteErr != nil {
-			fmt.Printf("[File Upload] WARNING: Failed to delete file from GCS after database error: %v\n", deleteErr)
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create file record: %v", err)})
+	// Save file record to database
+	fmt.Println("[File Upload] Saving file record to database...")
+	if err := h.DB.CreateFile(c.Request.Context(), uploadedFile); err != nil {
+		fmt.Printf("[File Upload] ERROR: Failed to save file record to database: %v\n", err)
+		// Try to delete the file from GCS if database operation fails
+		fmt.Printf("[File Upload] Attempting to delete file from GCS: %s\n", uploadedFile.Path)
+		_ = h.Storage.DeleteFile(c.Request.Context(), uploadedFile.Path)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save file record: %v", err)})
 		return
 	}
-	fmt.Printf("[File Upload] File record created in database: %+v\n", fileModel)
+	fmt.Println("[File Upload] File record successfully saved to database")
 
-	c.JSON(http.StatusOK, fileModel)
+	fmt.Println("[File Upload] File upload process completed successfully")
+	c.JSON(http.StatusCreated, uploadedFile)
 }
 
 // Get gets a file
@@ -149,22 +158,15 @@ func (h *FileHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// Get user ID from context
-	userID, exists := c.Get("user_id")
+	// Check if file belongs to the user's organization
+	orgID, exists := c.Get("org_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
 		return
 	}
 
-	// Check if user has access to the agent that owns this file
-	hasAccess, err := h.DB.CheckUserAgentAccess(c.Request.Context(), userID.(string), file.AgentID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to check user access: %v", err)})
-		return
-	}
-
-	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have access to this file"})
+	if file.OrganizationID != orgID.(string) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "File does not belong to your organization"})
 		return
 	}
 
@@ -281,22 +283,15 @@ func (h *FileHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// Get user ID from context
-	userID, exists := c.Get("user_id")
+	// Check if file belongs to the user's organization
+	orgID, exists := c.Get("org_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
 		return
 	}
 
-	// Check if user has access to the agent that owns this file
-	hasAccess, err := h.DB.CheckUserAgentAccess(c.Request.Context(), userID.(string), file.AgentID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to check user access: %v", err)})
-		return
-	}
-
-	if !hasAccess {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have access to this file"})
+	if file.OrganizationID != orgID.(string) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "File does not belong to your organization"})
 		return
 	}
 

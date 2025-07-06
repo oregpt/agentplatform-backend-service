@@ -94,6 +94,7 @@ func main() {
 				files.GET("/organization", fileHandler.ListByOrganization)
 				files.POST("/agent/:agent_id", fileHandler.Upload)
 				files.GET("/:id", fileHandler.Get)
+				files.GET("/:id/download", fileHandler.Get) // Add download endpoint that maps to Get handler
 				files.DELETE("/:id", fileHandler.Delete)
 			}
 

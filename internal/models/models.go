@@ -29,15 +29,14 @@ type Agent struct {
 
 // File represents a file uploaded to an agent
 type File struct {
-	ID             string    `json:"id" spanner:"FileID"`
-	AgentID        string    `json:"agent_id" spanner:"AgentID"`
-	OrganizationID string    `json:"organization_id" spanner:"OrganizationID"`
-	Name           string    `json:"name" spanner:"Name"`
-	Path           string    `json:"path" spanner:"Path"`
-	ContentType    string    `json:"content_type" spanner:"ContentType"`
-	SizeBytes      int64     `json:"size_bytes" spanner:"SizeBytes"`
-	CreatedBy      string    `json:"created_by" spanner:"CreatedBy"`
-	CreatedAt      time.Time `json:"created_at" spanner:"CreatedAt"`
+	ID          string    `json:"id" spanner:"FileID"`
+	AgentID     string    `json:"agent_id" spanner:"AgentID"`
+	Name        string    `json:"name" spanner:"Name"`
+	Path        string    `json:"path" spanner:"Path"`
+	ContentType string    `json:"content_type" spanner:"ContentType"`
+	SizeBytes   int64     `json:"size_bytes" spanner:"SizeBytes"`
+	CreatedBy   string    `json:"created_by" spanner:"CreatedBy"`
+	CreatedAt   time.Time `json:"created_at" spanner:"CreatedAt"`
 }
 
 // UserOrg represents a user's membership in an organization

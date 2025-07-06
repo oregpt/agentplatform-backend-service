@@ -98,7 +98,7 @@ func (h *UserHandler) GetByEmail(c *gin.Context) {
 func (h *UserHandler) List(c *gin.Context) {
 	// Check for organization_id query parameter first
 	queryOrgID := c.Query("organization_id")
-	
+
 	// If organization_id is provided, we need to filter users by organization membership
 	if queryOrgID != "" {
 		// Get user organization memberships from database
@@ -107,12 +107,12 @@ func (h *UserHandler) List(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		
+
 		// Return user organization memberships in the expected format
 		c.JSON(http.StatusOK, gin.H{"users": userOrgs})
 		return
 	}
-	
+
 	// If no organization_id is provided, return all users (core user records)
 	users, err := h.DB.ListUsers(c.Request.Context())
 	if err != nil {

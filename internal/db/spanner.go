@@ -141,16 +141,15 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 	if !existingTables["Files"] {
 		statements = append(statements, `
 			CREATE TABLE Files (
-				FileID STRING(36) NOT NULL,
 				AgentID STRING(36) NOT NULL,
-				OrganizationID STRING(36) NOT NULL,
+				FileID STRING(36) NOT NULL,
 				Name STRING(255) NOT NULL,
 				Path STRING(MAX) NOT NULL,
 				ContentType STRING(100) NOT NULL,
 				SizeBytes INT64 NOT NULL,
 				CreatedBy STRING(128) NOT NULL,
 				CreatedAt TIMESTAMP NOT NULL,
-			) PRIMARY KEY (FileID),
+			) PRIMARY KEY (AgentID, FileID),
 			INTERLEAVE IN PARENT Agents ON DELETE CASCADE
 		`)
 	}
@@ -537,26 +536,9 @@ func (s *SpannerClient) CreateFile(ctx context.Context, file *models.File) error
 		"CreatedAt":      file.CreatedAt,
 	}
 	
-	// Only include OrganizationID if it's not empty
-	// This makes the field optional in case the column doesn't exist in the table
-	if file.OrganizationID != "" {
-		// Try to include OrganizationID, but it won't fail if the column doesn't exist
-		// as we'll catch and handle that specific error
-		fileMap["OrganizationID"] = file.OrganizationID
-	}
-
 	mutation := spanner.InsertOrUpdateMap("Files", fileMap)
 
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
-	
-	// If we get a specific error about OrganizationID column not found,
-	// try again without that field
-	if err != nil && strings.Contains(err.Error(), "Column not found in table Files: OrganizationID") {
-		// Remove OrganizationID and try again
-		delete(fileMap, "OrganizationID")
-		mutation = spanner.InsertOrUpdateMap("Files", fileMap)
-		_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutation})
-	}
 	
 	return err
 }
@@ -564,7 +546,7 @@ func (s *SpannerClient) CreateFile(ctx context.Context, file *models.File) error
 // GetFile gets a file by ID
 func (s *SpannerClient) GetFile(ctx context.Context, fileID string) (*models.File, error) {
 	row, err := s.Client.Single().ReadRow(ctx, "Files", spanner.Key{fileID}, []string{
-		"FileID", "AgentID", "OrganizationID", "Name", "Path", "ContentType",
+		"FileID", "AgentID", "Name", "Path", "ContentType",
 		"SizeBytes", "CreatedBy", "CreatedAt",
 	})
 	if err != nil {
@@ -669,10 +651,7 @@ func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizat
 			continue
 		}
 		
-		// Set the organization ID for these files since it's not in the database
-		for _, file := range agentFiles {
-			file.OrganizationID = organizationID
-		}
+		// Files no longer have OrganizationID field
 		
 		allFiles = append(allFiles, agentFiles...)
 	}
