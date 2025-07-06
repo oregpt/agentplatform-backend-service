@@ -45,10 +45,14 @@ func (h *AgentHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Override organization_id from the request with the one from the context
+	// This ensures the agent is created in the correct organization
+	orgIDStr := orgID.(string)
+	
 	// Create agent
 	agent := &models.Agent{
 		ID:            uuid.New().String(),
-		OrganizationID: orgID.(string),
+		OrganizationID: orgIDStr,
 		Name:          req.Name,
 		Description:   req.Description,
 		Instructions:  req.Instructions,
@@ -61,6 +65,25 @@ func (h *AgentHandler) Create(c *gin.Context) {
 	// Save agent
 	if err := h.DB.CreateAgent(c.Request.Context(), agent); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create UserAgent record to automatically assign the creator to the agent
+	userAgent := &models.UserAgent{
+		OrganizationID: orgIDStr,
+		UserID:         userID.(string),
+		AgentID:        agent.ID,
+		CreatedAt:      time.Now(),
+	}
+
+	// Save UserAgent record
+	if err := h.DB.CreateUserAgent(c.Request.Context(), userAgent); err != nil {
+		// Log the error but don't fail the request since the agent was created successfully
+		log.Printf("Warning: Agent created but failed to assign creator: %v", err)
+		c.JSON(http.StatusCreated, gin.H{
+			"agent":   agent,
+			"warning": "Agent created but failed to assign creator: " + err.Error(),
+		})
 		return
 	}
 

@@ -653,6 +653,19 @@ func (s *SpannerClient) AssignUserToAgent(ctx context.Context, userID, orgID, ag
 	return err
 }
 
+// CreateUserAgent creates a new user-agent relationship
+func (s *SpannerClient) CreateUserAgent(ctx context.Context, userAgent *models.UserAgent) error {
+	mutation := spanner.InsertOrUpdateMap("UserAgents", map[string]interface{}{
+		"OrganizationID": userAgent.OrganizationID,
+		"UserID":         userAgent.UserID,
+		"AgentID":        userAgent.AgentID,
+		"CreatedAt":      userAgent.CreatedAt,
+	})
+	
+	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
+	return err
+}
+
 // RemoveUserFromAgent removes a user from an agent
 func (s *SpannerClient) RemoveUserFromAgent(ctx context.Context, userID, orgID, agentID string) error {
 	mutation := spanner.Delete("UserAgents", spanner.Key{orgID, userID, agentID})
