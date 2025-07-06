@@ -42,12 +42,25 @@ func (h *AgentHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Use organization ID from context if available
+	// Use organization ID from request, or from context if not specified
 	var orgIDStr string
-	if contextOrgID != nil && contextOrgID.(string) != "" && contextOrgID.(string) != "all" {
+	
+	// First check if organization ID is provided in the request
+	if req.OrganizationID != "" && req.OrganizationID != "all" {
+		orgIDStr = req.OrganizationID
+		log.Printf("Using organization ID from request: %s", orgIDStr)
+	} else if contextOrgID != nil && contextOrgID.(string) != "" && contextOrgID.(string) != "all" {
+		// Fall back to context organization ID
 		orgIDStr = contextOrgID.(string)
+		log.Printf("Using organization ID from context: %s", orgIDStr)
+	} else {
+		// If still no valid organization ID, return an error
+		log.Printf("Error: No valid organization ID provided in request or context")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "A valid organization ID is required to create an agent"})
+		return
 	}
-	// Note: orgIDStr may be empty, which is now allowed
+	
+	// At this point, orgIDStr should always have a valid value
 	
 	// Create agent
 	agent := &models.Agent{
@@ -72,29 +85,29 @@ func (h *AgentHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// If we have an organization ID, create a UserAgent record to link the agent to the user and organization
-	if orgIDStr != "" {
-		userAgent := &models.UserAgent{
-			OrganizationID: orgIDStr,
-			UserID:         userID.(string),
-			AgentID:        agent.ID,
-			CreatedAt:      time.Now(),
-		}
-
-		// Save UserAgent record
-		if err := h.DB.CreateUserAgent(c.Request.Context(), userAgent); err != nil {
-			// Log the error but don't fail the request since the agent was created successfully
-			log.Printf("Warning: Agent created but failed to assign creator: %v", err)
-			c.JSON(http.StatusCreated, gin.H{
-				"agent":   agent,
-				"warning": "Agent created but failed to assign creator: " + err.Error(),
-			})
-			return
-		}
-	} else {
-		// If no organization was specified, we can't create a UserAgent record
-		log.Printf("Warning: Agent created without organization ID, no UserAgent record created")
+	// Create a UserAgent record to link the agent to the user and organization
+	// At this point, we should always have a valid organization ID
+	log.Printf("Creating UserAgent record for agent %s, user %s, organization %s", agent.ID, userID.(string), orgIDStr)
+	
+	userAgent := &models.UserAgent{
+		OrganizationID: orgIDStr,
+		UserID:         userID.(string),
+		AgentID:        agent.ID,
+		CreatedAt:      time.Now(),
 	}
+
+	// Save UserAgent record
+	if err := h.DB.CreateUserAgent(c.Request.Context(), userAgent); err != nil {
+		// Log the error but don't fail the request since the agent was created successfully
+		log.Printf("Warning: Agent created but failed to assign creator: %v", err)
+		c.JSON(http.StatusCreated, gin.H{
+			"agent":   agent,
+			"warning": "Agent created but failed to assign creator: " + err.Error(),
+		})
+		return
+	}
+	
+	log.Printf("Successfully created UserAgent record for agent %s", agent.ID)
 
 	c.JSON(http.StatusCreated, agent)
 }
