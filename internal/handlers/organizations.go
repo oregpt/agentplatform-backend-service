@@ -118,10 +118,44 @@ func (h *OrganizationHandler) List(c *gin.Context) {
 	var orgs []*models.Organization
 	var err error
 
+	// Check for organization_id in query parameters
+	orgIDFromQuery := c.Query("organization_id")
+
 	// Check if this is an 'all organizations' request
 	allOrgsAccess, _ := c.Get("all_orgs_access")
 
-	if allOrgsAccess == true {
+	// If organization_id is provided in query and not "All", get that specific organization
+	if orgIDFromQuery != "" && orgIDFromQuery != "All" {
+		// Get organization from database
+		org, err := h.DB.GetOrganization(c.Request.Context(), orgIDFromQuery)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Verify user has access to this organization
+		userOrgs, err := h.DB.ListUserOrganizations(c.Request.Context(), userID.(string))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		hasAccess := false
+		for _, userOrg := range userOrgs {
+			if userOrg.OrganizationID == orgIDFromQuery {
+				hasAccess = true
+				break
+			}
+		}
+
+		if !hasAccess {
+			c.JSON(http.StatusForbidden, gin.H{"error": "User does not have access to this organization"})
+			return
+		}
+
+		// Return single organization as a slice
+		orgs = []*models.Organization{org}
+	} else if allOrgsAccess == true || orgIDFromQuery == "All" {
 		// Get all organizations for this user
 		orgs, err = h.DB.ListOrganizationsByUserID(c.Request.Context(), userID.(string))
 		if err != nil {

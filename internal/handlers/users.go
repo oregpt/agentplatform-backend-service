@@ -85,12 +85,49 @@ func (h *UserOrgHandler) Get(c *gin.Context) {
 
 // List lists all user organization memberships for an organization
 func (h *UserOrgHandler) List(c *gin.Context) {
+	// Get user ID from context for access control
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		return
+	}
+
 	// Check for organization_id query parameter first
 	queryOrgID := c.Query("organization_id")
 	
-	// If no query parameter, get org ID from context
+	// Check if this is an 'all organizations' request
+	allOrgsAccess, _ := c.Get("all_orgs_access")
+	
+	// Handle 'All' organizations case
+	if queryOrgID == "All" || (queryOrgID == "" && allOrgsAccess == true) {
+		// Get all organizations this user has access to
+		userOrgs, err := h.DB.ListUserOrganizations(c.Request.Context(), userID.(string))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// For each organization, get all users
+		var allUserOrgs []*models.UserOrg
+		for _, userOrg := range userOrgs {
+			// Get all users for this organization
+			orgUsers, err := h.DB.ListUserOrgs(c.Request.Context(), userOrg.OrganizationID)
+			if err != nil {
+				continue // Skip if error
+			}
+			
+			// Add to combined result
+			allUserOrgs = append(allUserOrgs, orgUsers...)
+		}
+		
+		c.JSON(http.StatusOK, gin.H{"users": allUserOrgs})
+		return
+	}
+	
+	// Handle specific organization case
 	orgID := queryOrgID
 	if orgID == "" {
+		// If no query parameter, get org ID from context
 		contextOrgID, exists := c.Get("org_id")
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
@@ -99,8 +136,28 @@ func (h *UserOrgHandler) List(c *gin.Context) {
 		orgID = contextOrgID.(string)
 	}
 
+	// Verify user has access to this organization
+	userOrgs, err := h.DB.ListUserOrganizations(c.Request.Context(), userID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	hasAccess := false
+	for _, userOrg := range userOrgs {
+		if userOrg.OrganizationID == orgID {
+			hasAccess = true
+			break
+		}
+	}
+
+	if !hasAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "User does not have access to this organization"})
+		return
+	}
+
 	// Get user organization memberships from database
-	userOrgs, err := h.DB.ListUserOrgs(c.Request.Context(), orgID)
+	userOrgs, err = h.DB.ListUserOrgs(c.Request.Context(), orgID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

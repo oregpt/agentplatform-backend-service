@@ -125,7 +125,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 		statements = append(statements, `
 			CREATE TABLE Agents (
 				AgentID STRING(36) NOT NULL,
-				OrganizationID STRING(36) NOT NULL,
+				OrganizationID STRING(36),
 				Name STRING(255) NOT NULL,
 				Description STRING(MAX),
 				Instructions STRING(MAX),
@@ -133,8 +133,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 				CreatedBy STRING(128) NOT NULL,
 				CreatedAt TIMESTAMP NOT NULL,
 				UpdatedAt TIMESTAMP NOT NULL,
-			) PRIMARY KEY (AgentID),
-			INTERLEAVE IN PARENT Organizations ON DELETE CASCADE
+			) PRIMARY KEY (AgentID)
 		`)
 	}
 	
@@ -618,6 +617,42 @@ func (s *SpannerClient) ListUserOrgs(ctx context.Context, orgID string) ([]*mode
 	
 	return userOrgs, nil
 }
+
+// ListUserOrganizations lists all organizations a user belongs to
+func (s *SpannerClient) ListUserOrganizations(ctx context.Context, userID string) ([]*models.UserOrg, error) {
+	stmt := spanner.Statement{
+		SQL: `SELECT OrganizationID, UserID, Email, DisplayName, Role, CreatedAt, UpdatedAt 
+			  FROM UserOrgs WHERE UserID = @userID`,
+		Params: map[string]interface{}{
+			"userID": userID,
+		},
+	}
+	
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+	
+	var userOrgs []*models.UserOrg
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		
+		var userOrg models.UserOrg
+		if err := row.ToStruct(&userOrg); err != nil {
+			return nil, err
+		}
+		
+		userOrgs = append(userOrgs, &userOrg)
+	}
+	
+	return userOrgs, nil
+}
+
+
 
 // UpdateUserOrg updates a user organization membership
 func (s *SpannerClient) UpdateUserOrg(ctx context.Context, userOrg *models.UserOrg) error {
