@@ -274,18 +274,28 @@ func (h *AgentHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, agent)
 }
 
-// Delete deletes an agent
+// Delete deletes an agent and all related UserAgent records
 func (h *AgentHandler) Delete(c *gin.Context) {
 	// Get agent ID from path
 	agentID := c.Param("id")
 	if agentID == "" {
+		log.Printf("[Agent Delete] Error: No agent ID provided in request")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Agent ID is required"})
 		return
+	}
+
+	log.Printf("[Agent Delete] Attempting to delete agent with ID: %s", agentID)
+
+	// Get user ID from context for logging
+	userID, exists := c.Get("user_id")
+	if exists {
+		log.Printf("[Agent Delete] Request initiated by user: %s", userID.(string))
 	}
 
 	// Get agent from database
 	agent, err := h.DB.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
+		log.Printf("[Agent Delete] Error retrieving agent %s: %v", agentID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -293,20 +303,28 @@ func (h *AgentHandler) Delete(c *gin.Context) {
 	// Check if agent belongs to the user's organization
 	orgID, exists := c.Get("org_id")
 	if !exists {
+		log.Printf("[Agent Delete] Error: Organization ID not found in context")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
 		return
 	}
 	
+	log.Printf("[Agent Delete] Verifying agent %s belongs to organization %s", agentID, orgID.(string))
+	
 	if agent.OrganizationID != orgID.(string) {
+		log.Printf("[Agent Delete] Error: Agent %s belongs to organization %s, not user's organization %s", 
+			agentID, agent.OrganizationID, orgID.(string))
 		c.JSON(http.StatusForbidden, gin.H{"error": "Agent does not belong to your organization"})
 		return
 	}
 
-	// Delete agent from database
+	// Delete agent and related UserAgent records from database
+	log.Printf("[Agent Delete] Deleting agent %s and related UserAgent records", agentID)
 	if err := h.DB.DeleteAgent(c.Request.Context(), agentID); err != nil {
+		log.Printf("[Agent Delete] Error deleting agent %s: %v", agentID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Agent deleted"})
+	log.Printf("[Agent Delete] Successfully deleted agent %s and related UserAgent records", agentID)
+	c.JSON(http.StatusOK, gin.H{"message": "Agent deleted successfully"})
 }

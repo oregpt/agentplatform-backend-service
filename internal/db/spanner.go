@@ -22,9 +22,9 @@ type SpannerClient struct {
 // NewSpannerClient creates a new Spanner client
 func NewSpannerClient(ctx context.Context, projectID, instance, database string) (*SpannerClient, error) {
 	// Create the database path
-	databaseName := fmt.Sprintf("projects/%s/instances/%s/databases/%s", 
+	databaseName := fmt.Sprintf("projects/%s/instances/%s/databases/%s",
 		projectID,
-		instance, 
+		instance,
 		database)
 
 	// Create the Spanner client
@@ -89,7 +89,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 		"UserAgents",
 		"Users",
 	}
-	
+
 	// Check if all required tables exist
 	missingTables := []string{}
 	for _, table := range requiredTables {
@@ -97,15 +97,15 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 			missingTables = append(missingTables, table)
 		}
 	}
-	
+
 	// If all tables exist, return
 	if len(missingTables) == 0 {
 		return nil
 	}
-	
+
 	// Create the missing tables
 	statements := []string{}
-	
+
 	// Organizations table
 	if !existingTables["Organizations"] {
 		statements = append(statements, `
@@ -119,7 +119,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 			) PRIMARY KEY (OrganizationID)
 		`)
 	}
-	
+
 	// Agents table
 	if !existingTables["Agents"] {
 		statements = append(statements, `
@@ -136,7 +136,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 			) PRIMARY KEY (AgentID)
 		`)
 	}
-	
+
 	// Files table
 	if !existingTables["Files"] {
 		statements = append(statements, `
@@ -154,7 +154,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 			INTERLEAVE IN PARENT Agents ON DELETE CASCADE
 		`)
 	}
-	
+
 	// UserOrgs table
 	if !existingTables["UserOrgs"] {
 		statements = append(statements, `
@@ -170,7 +170,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 			INTERLEAVE IN PARENT Organizations ON DELETE CASCADE
 		`)
 	}
-	
+
 	// UserAgents table
 	if !existingTables["UserAgents"] {
 		statements = append(statements, `
@@ -183,7 +183,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 			INTERLEAVE IN PARENT UserOrgs ON DELETE CASCADE
 		`)
 	}
-	
+
 	// Users table
 	if !existingTables["Users"] {
 		statements = append(statements, `
@@ -199,7 +199,7 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 			) PRIMARY KEY (UserID)
 		`)
 	}
-	
+
 	// Execute the statements
 	op, err := s.AdminClient.UpdateDatabaseDdl(ctx, &databasepb.UpdateDatabaseDdlRequest{
 		Database:   s.DatabaseName,
@@ -208,12 +208,12 @@ func (s *SpannerClient) EnsureTablesExist(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to update database DDL: %v", err)
 	}
-	
+
 	// Wait for the operation to complete
 	if err := op.Wait(ctx); err != nil {
 		return fmt.Errorf("failed to wait for operation: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -227,7 +227,7 @@ func (s *SpannerClient) CreateOrganization(ctx context.Context, org *models.Orga
 		"CreatedAt":      org.CreatedAt,
 		"UpdatedAt":      org.UpdatedAt,
 	})
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
@@ -240,12 +240,12 @@ func (s *SpannerClient) GetOrganization(ctx context.Context, orgID string) (*mod
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var org models.Organization
 	if err := row.ToStruct(&org); err != nil {
 		return nil, err
 	}
-	
+
 	return &org, nil
 }
 
@@ -254,7 +254,7 @@ func (s *SpannerClient) ListOrganizations(ctx context.Context) ([]*models.Organi
 	stmt := spanner.Statement{SQL: `SELECT OrganizationID, Name, Description, CreatedBy, CreatedAt, UpdatedAt FROM Organizations`}
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	var orgs []*models.Organization
 	for {
 		row, err := iter.Next()
@@ -264,15 +264,15 @@ func (s *SpannerClient) ListOrganizations(ctx context.Context) ([]*models.Organi
 		if err != nil {
 			return nil, err
 		}
-		
+
 		var org models.Organization
 		if err := row.ToStruct(&org); err != nil {
 			return nil, err
 		}
-		
+
 		orgs = append(orgs, &org)
 	}
-	
+
 	return orgs, nil
 }
 
@@ -285,10 +285,10 @@ func (s *SpannerClient) ListOrganizationsByUserID(ctx context.Context, userID st
 			"userID": userID,
 		},
 	}
-	
+
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	// Collect organization IDs the user has access to
 	var orgIDs []string
 	for {
@@ -299,20 +299,20 @@ func (s *SpannerClient) ListOrganizationsByUserID(ctx context.Context, userID st
 		if err != nil {
 			return nil, fmt.Errorf("error querying user organizations: %v", err)
 		}
-		
+
 		var orgID string
 		if err := row.Column(0, &orgID); err != nil {
 			return nil, fmt.Errorf("error reading organization ID: %v", err)
 		}
-		
+
 		orgIDs = append(orgIDs, orgID)
 	}
-	
+
 	// If no organizations found, return empty list
 	if len(orgIDs) == 0 {
 		return []*models.Organization{}, nil
 	}
-	
+
 	// Now fetch the organization details for each organization ID
 	var orgs []*models.Organization
 	for _, orgID := range orgIDs {
@@ -323,7 +323,7 @@ func (s *SpannerClient) ListOrganizationsByUserID(ctx context.Context, userID st
 		}
 		orgs = append(orgs, org)
 	}
-	
+
 	return orgs, nil
 }
 
@@ -335,7 +335,7 @@ func (s *SpannerClient) UpdateOrganization(ctx context.Context, org *models.Orga
 		"Description":    org.Description,
 		"UpdatedAt":      org.UpdatedAt,
 	})
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
@@ -351,16 +351,16 @@ func (s *SpannerClient) DeleteOrganization(ctx context.Context, orgID string) er
 func (s *SpannerClient) CreateAgent(ctx context.Context, agent *models.Agent) error {
 	// Create a map for the agent data
 	agentData := map[string]interface{}{
-		"AgentID":        agent.ID,
-		"Name":           agent.Name,
-		"Description":    agent.Description,
-		"Instructions":   agent.Instructions,
-		"AIProvider":     agent.AIProvider,
-		"CreatedBy":      agent.CreatedBy,
-		"CreatedAt":      agent.CreatedAt,
-		"UpdatedAt":      agent.UpdatedAt,
+		"AgentID":      agent.ID,
+		"Name":         agent.Name,
+		"Description":  agent.Description,
+		"Instructions": agent.Instructions,
+		"AIProvider":   agent.AIProvider,
+		"CreatedBy":    agent.CreatedBy,
+		"CreatedAt":    agent.CreatedAt,
+		"UpdatedAt":    agent.UpdatedAt,
 	}
-	
+
 	// Only include OrganizationID if it's not empty
 	if agent.OrganizationID != "" {
 		agentData["OrganizationID"] = agent.OrganizationID
@@ -368,9 +368,9 @@ func (s *SpannerClient) CreateAgent(ctx context.Context, agent *models.Agent) er
 		// Set OrganizationID to NULL explicitly
 		agentData["OrganizationID"] = nil
 	}
-	
+
 	mutation := spanner.InsertOrUpdateMap("Agents", agentData)
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
@@ -378,18 +378,18 @@ func (s *SpannerClient) CreateAgent(ctx context.Context, agent *models.Agent) er
 // GetAgent gets an agent by ID
 func (s *SpannerClient) GetAgent(ctx context.Context, agentID string) (*models.Agent, error) {
 	row, err := s.Client.Single().ReadRow(ctx, "Agents", spanner.Key{agentID}, []string{
-		"AgentID", "OrganizationID", "Name", "Description", "Instructions", "AIProvider", 
+		"AgentID", "OrganizationID", "Name", "Description", "Instructions", "AIProvider",
 		"CreatedBy", "CreatedAt", "UpdatedAt",
 	})
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var agent models.Agent
 	if err := row.ToStruct(&agent); err != nil {
 		return nil, err
 	}
-	
+
 	return &agent, nil
 }
 
@@ -402,10 +402,10 @@ func (s *SpannerClient) ListAgents(ctx context.Context, orgID string) ([]*models
 			"orgID": orgID,
 		},
 	}
-	
+
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	var agents []*models.Agent
 	for {
 		row, err := iter.Next()
@@ -415,15 +415,15 @@ func (s *SpannerClient) ListAgents(ctx context.Context, orgID string) ([]*models
 		if err != nil {
 			return nil, err
 		}
-		
+
 		var agent models.Agent
 		if err := row.ToStruct(&agent); err != nil {
 			return nil, err
 		}
-		
+
 		agents = append(agents, &agent)
 	}
-	
+
 	return agents, nil
 }
 
@@ -438,16 +438,59 @@ func (s *SpannerClient) UpdateAgent(ctx context.Context, agent *models.Agent) er
 		"AIProvider":     agent.AIProvider,
 		"UpdatedAt":      agent.UpdatedAt,
 	})
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
 
-// DeleteAgent deletes an agent
+// DeleteAgent deletes an agent and all related UserAgent records
 func (s *SpannerClient) DeleteAgent(ctx context.Context, agentID string) error {
-	mutation := spanner.Delete("Agents", spanner.Key{agentID})
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
-	return err
+	// First, find all UserAgent records for this agent
+	var userAgentKeys []spanner.Key
+	query := spanner.Statement{
+		SQL: `SELECT UserID, OrganizationID FROM UserAgents WHERE AgentID = @agentID`,
+		Params: map[string]interface{}{"agentID": agentID},
+	}
+
+	iter := s.Client.Single().Query(ctx, query)
+	defer iter.Stop()
+
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("error reading UserAgent records: %v", err)
+		}
+
+		var userID, orgID string
+		if err := row.Columns(&userID, &orgID); err != nil {
+			return fmt.Errorf("error scanning UserAgent record: %v", err)
+		}
+
+		// Create a key for each UserAgent record to delete
+		userAgentKeys = append(userAgentKeys, spanner.Key{userID, orgID, agentID})
+	}
+
+	// Create mutations to delete all UserAgent records and the Agent
+	mutations := make([]*spanner.Mutation, 0, len(userAgentKeys)+1)
+
+	// Add mutations to delete all UserAgent records
+	for _, key := range userAgentKeys {
+		mutations = append(mutations, spanner.Delete("UserAgents", key))
+	}
+
+	// Add mutation to delete the Agent
+	mutations = append(mutations, spanner.Delete("Agents", spanner.Key{agentID}))
+
+	// Apply all mutations in a single transaction
+	_, err := s.Client.Apply(ctx, mutations)
+	if err != nil {
+		return fmt.Errorf("error deleting agent and related records: %v", err)
+	}
+
+	return nil
 }
 
 // CreateFile creates a new file record
@@ -463,7 +506,7 @@ func (s *SpannerClient) CreateFile(ctx context.Context, file *models.File) error
 		"CreatedBy":      file.CreatedBy,
 		"CreatedAt":      file.CreatedAt,
 	})
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
@@ -471,18 +514,18 @@ func (s *SpannerClient) CreateFile(ctx context.Context, file *models.File) error
 // GetFile gets a file by ID
 func (s *SpannerClient) GetFile(ctx context.Context, fileID string) (*models.File, error) {
 	row, err := s.Client.Single().ReadRow(ctx, "Files", spanner.Key{fileID}, []string{
-		"FileID", "AgentID", "OrganizationID", "Name", "Path", "ContentType", 
+		"FileID", "AgentID", "OrganizationID", "Name", "Path", "ContentType",
 		"SizeBytes", "CreatedBy", "CreatedAt",
 	})
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var file models.File
 	if err := row.ToStruct(&file); err != nil {
 		return nil, err
 	}
-	
+
 	return &file, nil
 }
 
@@ -495,10 +538,10 @@ func (s *SpannerClient) ListFiles(ctx context.Context, agentID string) ([]*model
 			"agentID": agentID,
 		},
 	}
-	
+
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	var files []*models.File
 	for {
 		row, err := iter.Next()
@@ -508,15 +551,15 @@ func (s *SpannerClient) ListFiles(ctx context.Context, agentID string) ([]*model
 		if err != nil {
 			return nil, err
 		}
-		
+
 		var file models.File
 		if err := row.ToStruct(&file); err != nil {
 			return nil, err
 		}
-		
+
 		files = append(files, &file)
 	}
-	
+
 	return files, nil
 }
 
@@ -529,10 +572,10 @@ func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizat
 			"organizationID": organizationID,
 		},
 	}
-	
+
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	var files []*models.File
 	for {
 		row, err := iter.Next()
@@ -542,15 +585,15 @@ func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizat
 		if err != nil {
 			return nil, err
 		}
-		
+
 		var file models.File
 		if err := row.ToStruct(&file); err != nil {
 			return nil, err
 		}
-		
+
 		files = append(files, &file)
 	}
-	
+
 	return files, nil
 }
 
@@ -572,7 +615,7 @@ func (s *SpannerClient) CreateUserOrg(ctx context.Context, userOrg *models.UserO
 		"CreatedAt":      userOrg.CreatedAt,
 		"UpdatedAt":      userOrg.UpdatedAt,
 	})
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
@@ -585,12 +628,12 @@ func (s *SpannerClient) GetUserOrg(ctx context.Context, userID, orgID string) (*
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var userOrg models.UserOrg
 	if err := row.ToStruct(&userOrg); err != nil {
 		return nil, err
 	}
-	
+
 	return &userOrg, nil
 }
 
@@ -603,10 +646,10 @@ func (s *SpannerClient) ListUserOrgs(ctx context.Context, orgID string) ([]*mode
 			"orgID": orgID,
 		},
 	}
-	
+
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	var userOrgs []*models.UserOrg
 	for {
 		row, err := iter.Next()
@@ -616,15 +659,15 @@ func (s *SpannerClient) ListUserOrgs(ctx context.Context, orgID string) ([]*mode
 		if err != nil {
 			return nil, err
 		}
-		
+
 		var userOrg models.UserOrg
 		if err := row.ToStruct(&userOrg); err != nil {
 			return nil, err
 		}
-		
+
 		userOrgs = append(userOrgs, &userOrg)
 	}
-	
+
 	return userOrgs, nil
 }
 
@@ -637,10 +680,10 @@ func (s *SpannerClient) ListUserOrganizations(ctx context.Context, userID string
 			"userID": userID,
 		},
 	}
-	
+
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	var userOrgs []*models.UserOrg
 	for {
 		row, err := iter.Next()
@@ -650,19 +693,17 @@ func (s *SpannerClient) ListUserOrganizations(ctx context.Context, userID string
 		if err != nil {
 			return nil, err
 		}
-		
+
 		var userOrg models.UserOrg
 		if err := row.ToStruct(&userOrg); err != nil {
 			return nil, err
 		}
-		
+
 		userOrgs = append(userOrgs, &userOrg)
 	}
-	
+
 	return userOrgs, nil
 }
-
-
 
 // UpdateUserOrg updates a user organization membership
 func (s *SpannerClient) UpdateUserOrg(ctx context.Context, userOrg *models.UserOrg) error {
@@ -673,7 +714,7 @@ func (s *SpannerClient) UpdateUserOrg(ctx context.Context, userOrg *models.UserO
 		"Role":           userOrg.Role,
 		"UpdatedAt":      userOrg.UpdatedAt,
 	})
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
@@ -693,7 +734,7 @@ func (s *SpannerClient) AssignUserToAgent(ctx context.Context, userID, orgID, ag
 		"AgentID":        agentID,
 		"CreatedAt":      spanner.CommitTimestamp,
 	})
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
@@ -706,7 +747,7 @@ func (s *SpannerClient) CreateUserAgent(ctx context.Context, userAgent *models.U
 		"AgentID":        userAgent.AgentID,
 		"CreatedAt":      userAgent.CreatedAt,
 	})
-	
+
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
 	return err
 }
@@ -727,10 +768,10 @@ func (s *SpannerClient) ListUserAgents(ctx context.Context, userID, orgID string
 			"userID": userID,
 		},
 	}
-	
+
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
-	
+
 	var agentIDs []string
 	for {
 		row, err := iter.Next()
@@ -740,14 +781,14 @@ func (s *SpannerClient) ListUserAgents(ctx context.Context, userID, orgID string
 		if err != nil {
 			return nil, err
 		}
-		
+
 		var agentID string
 		if err := row.Column(0, &agentID); err != nil {
 			return nil, err
 		}
-		
+
 		agentIDs = append(agentIDs, agentID)
 	}
-	
+
 	return agentIDs, nil
 }
