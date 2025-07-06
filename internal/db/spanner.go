@@ -262,11 +262,9 @@ func (s *SpannerClient) ListOrganizations(ctx context.Context) ([]*models.Organi
 
 // ListOrganizationsByUserID lists all organizations that a user has access to
 func (s *SpannerClient) ListOrganizationsByUserID(ctx context.Context, userID string) ([]*models.Organization, error) {
+	// First, find all organizations the user belongs to by querying the Users table
 	stmt := spanner.Statement{
-		SQL: `SELECT o.OrganizationID, o.Name, o.Description, o.CreatedBy, o.CreatedAt, o.UpdatedAt 
-			FROM Organizations o 
-			JOIN UserOrganizations uo ON o.OrganizationID = uo.OrganizationID 
-			WHERE uo.UserID = @userID`,
+		SQL: `SELECT DISTINCT OrganizationID FROM Users WHERE UserID = @userID`,
 		Params: map[string]interface{}{
 			"userID": userID,
 		},
@@ -275,22 +273,39 @@ func (s *SpannerClient) ListOrganizationsByUserID(ctx context.Context, userID st
 	iter := s.Client.Single().Query(ctx, stmt)
 	defer iter.Stop()
 	
-	var orgs []*models.Organization
+	// Collect organization IDs the user has access to
+	var orgIDs []string
 	for {
 		row, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error querying user organizations: %v", err)
 		}
 		
-		var org models.Organization
-		if err := row.ToStruct(&org); err != nil {
-			return nil, err
+		var orgID string
+		if err := row.Column(0, &orgID); err != nil {
+			return nil, fmt.Errorf("error reading organization ID: %v", err)
 		}
 		
-		orgs = append(orgs, &org)
+		orgIDs = append(orgIDs, orgID)
+	}
+	
+	// If no organizations found, return empty list
+	if len(orgIDs) == 0 {
+		return []*models.Organization{}, nil
+	}
+	
+	// Now fetch the organization details for each organization ID
+	var orgs []*models.Organization
+	for _, orgID := range orgIDs {
+		org, err := s.GetOrganization(ctx, orgID)
+		if err != nil {
+			// Skip organizations that can't be found
+			continue
+		}
+		orgs = append(orgs, org)
 	}
 	
 	return orgs, nil
