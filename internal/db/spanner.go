@@ -545,17 +545,41 @@ func (s *SpannerClient) CreateFile(ctx context.Context, file *models.File) error
 
 // GetFile gets a file by ID
 func (s *SpannerClient) GetFile(ctx context.Context, fileID string) (*models.File, error) {
-	row, err := s.Client.Single().ReadRow(ctx, "Files", spanner.Key{fileID}, []string{
+	// First, find the AgentID for this file
+	stmt := spanner.Statement{
+		SQL: `SELECT AgentID FROM Files WHERE FileID = @fileID LIMIT 1`,
+		Params: map[string]interface{}{
+			"fileID": fileID,
+		},
+	}
+
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	var agentID string
+	row, err := iter.Next()
+	if err == iterator.Done {
+		return nil, fmt.Errorf("file not found: %s", fileID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error querying for file: %v", err)
+	}
+	if err := row.Columns(&agentID); err != nil {
+		return nil, fmt.Errorf("error reading agent ID: %v", err)
+	}
+
+	// Now read the full file record with the composite key
+	row, err = s.Client.Single().ReadRow(ctx, "Files", spanner.Key{agentID, fileID}, []string{
 		"FileID", "AgentID", "Name", "Path", "ContentType",
 		"SizeBytes", "CreatedBy", "CreatedAt",
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading file with composite key: %v", err)
 	}
 
 	var file models.File
 	if err := row.ToStruct(&file); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error converting row to struct: %v", err)
 	}
 
 	return &file, nil
@@ -661,9 +685,36 @@ func (s *SpannerClient) ListFilesByOrganizationID(ctx context.Context, organizat
 
 // DeleteFile deletes a file record
 func (s *SpannerClient) DeleteFile(ctx context.Context, fileID string) error {
-	mutation := spanner.Delete("Files", spanner.Key{fileID})
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
-	return err
+	// First, find the AgentID for this file
+	stmt := spanner.Statement{
+		SQL: `SELECT AgentID FROM Files WHERE FileID = @fileID LIMIT 1`,
+		Params: map[string]interface{}{
+			"fileID": fileID,
+		},
+	}
+
+	iter := s.Client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	var agentID string
+	row, err := iter.Next()
+	if err == iterator.Done {
+		return fmt.Errorf("file not found: %s", fileID)
+	}
+	if err != nil {
+		return fmt.Errorf("error querying for file: %v", err)
+	}
+	if err := row.Columns(&agentID); err != nil {
+		return fmt.Errorf("error reading agent ID: %v", err)
+	}
+
+	// Now delete the file record with the composite key
+	mutation := spanner.Delete("Files", spanner.Key{agentID, fileID})
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutation})
+	if err != nil {
+		return fmt.Errorf("error deleting file: %v", err)
+	}
+	return nil
 }
 
 // CreateUserOrg creates a new user organization membership
