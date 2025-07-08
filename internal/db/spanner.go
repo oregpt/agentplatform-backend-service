@@ -719,6 +719,21 @@ func (s *SpannerClient) DeleteFile(ctx context.Context, fileID string) error {
 
 // CreateUserOrg creates a new user organization membership
 func (s *SpannerClient) CreateUserOrg(ctx context.Context, userOrg *models.UserOrg) error {
+	// First, verify that the organization exists
+	_, err := s.GetOrganization(ctx, userOrg.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("failed to create user-org association: organization %s does not exist: %w", 
+			userOrg.OrganizationID, err)
+	}
+
+	// Then, verify that the user exists
+	_, err = s.GetUser(ctx, userOrg.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to create user-org association: user %s does not exist: %w", 
+			userOrg.UserID, err)
+	}
+
+	// Create the mutation
 	mutation := spanner.InsertOrUpdateMap("UserOrgs", map[string]interface{}{
 		"OrganizationID": userOrg.OrganizationID,
 		"UserID":         userOrg.UserID,
@@ -729,8 +744,13 @@ func (s *SpannerClient) CreateUserOrg(ctx context.Context, userOrg *models.UserO
 		"UpdatedAt":      userOrg.UpdatedAt,
 	})
 
-	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
-	return err
+	// Apply the mutation
+	_, err = s.Client.Apply(ctx, []*spanner.Mutation{mutation})
+	if err != nil {
+		return fmt.Errorf("failed to apply user-org mutation: %w", err)
+	}
+
+	return nil
 }
 
 // GetUserOrg gets a user organization membership by user ID and organization ID

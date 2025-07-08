@@ -37,6 +37,10 @@ func (h *UserOrgHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Log the request for debugging
+	c.Request.Context().Value("logger").(func(string, ...interface{}))("Creating user-org association with payload: %+v", req)
+	c.Request.Context().Value("logger").(func(string, ...interface{}))("Organization ID from context: %s", orgID)
+
 	// Generate a UUID for the user if not provided
 	userID := req.UserID
 	if userID == "" {
@@ -45,10 +49,44 @@ func (h *UserOrgHandler) Create(c *gin.Context) {
 		userID = req.Email
 	}
 
+	// Verify that the organization exists before creating the user-org association
+	org, err := h.DB.GetOrganization(c.Request.Context(), orgID.(string))
+	if err != nil {
+		c.Request.Context().Value("logger").(func(string, ...interface{}))("Organization lookup failed: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Organization does not exist: " + err.Error()})
+		return
+	}
+	c.Request.Context().Value("logger").(func(string, ...interface{}))("Found organization: %+v", org)
+
+	// Verify that the user exists in the Users table
+	user, err := h.DB.GetUser(c.Request.Context(), userID)
+	if err != nil {
+		c.Request.Context().Value("logger").(func(string, ...interface{}))("User lookup failed: %v, will create user", err)
+		// User doesn't exist, create it first
+		user := &models.User{
+			ID:          userID,
+			Email:       req.Email,
+			DisplayName: req.DisplayName,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+			Metadata:    "{}",
+		}
+		
+		err = h.DB.CreateUser(c.Request.Context(), user)
+		if err != nil {
+			c.Request.Context().Value("logger").(func(string, ...interface{}))("User creation failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user: " + err.Error()})
+			return
+		}
+		c.Request.Context().Value("logger").(func(string, ...interface{}))("Created new user: %+v", user)
+	} else {
+		c.Request.Context().Value("logger").(func(string, ...interface{}))("Found existing user: %+v", user)
+	}
+
 	// Create user organization membership
 	userOrg := &models.UserOrg{
-		UserID:         userID,
-		OrganizationID: orgID.(string),
+		OrganizationID: orgID.(string), // Ensure organization_id is correctly set as the first field
+		UserID:         userID,        // Ensure user_id is correctly set as the second field
 		Email:          req.Email,
 		DisplayName:    req.DisplayName,
 		Role:           req.Role,
@@ -56,12 +94,19 @@ func (h *UserOrgHandler) Create(c *gin.Context) {
 		UpdatedAt:      time.Now(),
 	}
 
+	// Log the exact values being used for debugging
+	c.Request.Context().Value("logger").(func(string, ...interface{}))("UserOrg struct - OrganizationID: %s, UserID: %s", userOrg.OrganizationID, userOrg.UserID)
+
+	c.Request.Context().Value("logger").(func(string, ...interface{}))("Attempting to create user-org association: %+v", userOrg)
+
 	// Save user organization membership
 	if err := h.DB.CreateUserOrg(c.Request.Context(), userOrg); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.Request.Context().Value("logger").(func(string, ...interface{}))("Failed to create user-org association: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user-org association: " + err.Error()})
 		return
 	}
 
+	c.Request.Context().Value("logger").(func(string, ...interface{}))("Successfully created user-org association")
 	c.JSON(http.StatusCreated, userOrg)
 }
 
