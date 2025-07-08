@@ -57,7 +57,7 @@ type User struct {
 	DisplayName string    `json:"display_name,omitempty" spanner:"DisplayName"`
 	Address     string    `json:"address,omitempty" spanner:"Address"`
 	Phone       string    `json:"phone,omitempty" spanner:"Phone"`
-	Metadata    string    `json:"metadata,omitempty" spanner:"Metadata"`
+	// Metadata field is omitted from operations to avoid JSON decoding issues
 	CreatedAt   time.Time `json:"created_at" spanner:"CreatedAt"`
 	UpdatedAt   time.Time `json:"updated_at" spanner:"UpdatedAt"`
 }

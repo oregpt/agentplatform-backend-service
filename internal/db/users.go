@@ -22,21 +22,16 @@ func (s *SpannerClient) CreateUser(ctx context.Context, user *models.User) error
 		user.UpdatedAt = now
 	}
 
-	// Ensure Metadata is valid JSON
-	if user.Metadata == "" {
-		user.Metadata = "{}"
-	}
-
 	// Log the user data for debugging
-	log.Printf("Creating user with ID: %s, Email: %s, Metadata: %s", user.ID, user.Email, user.Metadata)
+	log.Printf("Creating user with ID: %s, Email: %s", user.ID, user.Email)
 
+	// Create mutation without the Metadata field
 	mutation := spanner.InsertOrUpdateMap("Users", map[string]interface{}{
 		"UserID":      user.ID,
 		"Email":       user.Email,
 		"DisplayName": user.DisplayName,
 		"Address":     user.Address,
 		"Phone":       user.Phone,
-		"Metadata":    user.Metadata,
 		"CreatedAt":   user.CreatedAt,
 		"UpdatedAt":   user.UpdatedAt,
 	})
@@ -50,25 +45,42 @@ func (s *SpannerClient) CreateUser(ctx context.Context, user *models.User) error
 
 // GetUser gets a user by ID
 func (s *SpannerClient) GetUser(ctx context.Context, userID string) (*models.User, error) {
+	// Read the user row without the Metadata field
 	row, err := s.Client.Single().ReadRow(ctx, "Users", spanner.Key{userID}, []string{
-		"UserID", "Email", "DisplayName", "Address", "Phone", "Metadata", "CreatedAt", "UpdatedAt",
+		"UserID", "Email", "DisplayName", "Address", "Phone", "CreatedAt", "UpdatedAt",
 	})
 	if err != nil {
+		log.Printf("Error reading user %s: %v", userID, err)
 		return nil, err
 	}
-	
-	var user models.User
-	if err := row.ToStruct(&user); err != nil {
+
+	// Extract user fields
+	var userID2, email, displayName, address, phone string
+	var createdAt, updatedAt time.Time
+
+	if err := row.Columns(&userID2, &email, &displayName, &address, &phone, &createdAt, &updatedAt); err != nil {
+		log.Printf("Error extracting user columns for %s: %v", userID, err)
 		return nil, err
 	}
-	
-	return &user, nil
+
+	// Construct the user object without setting Metadata
+	user := &models.User{
+		ID:          userID2,
+		Email:       email,
+		DisplayName: displayName,
+		Address:     address,
+		Phone:       phone,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+	}
+
+	return user, nil
 }
 
 // ListUsers lists all users
 func (s *SpannerClient) ListUsers(ctx context.Context) ([]*models.User, error) {
 	stmt := spanner.Statement{
-		SQL: `SELECT UserID, Email, DisplayName, Address, Phone, Metadata, CreatedAt, UpdatedAt 
+		SQL: `SELECT UserID, Email, DisplayName, Address, Phone, CreatedAt, UpdatedAt 
 			  FROM Users`,
 	}
 	
@@ -85,12 +97,25 @@ func (s *SpannerClient) ListUsers(ctx context.Context) ([]*models.User, error) {
 			return nil, err
 		}
 		
-		var user models.User
-		if err := row.ToStruct(&user); err != nil {
+		// Extract user fields manually to avoid Metadata issues
+		var userID, email, displayName, address, phone string
+		var createdAt, updatedAt time.Time
+		
+		if err := row.Columns(&userID, &email, &displayName, &address, &phone, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		
-		users = append(users, &user)
+		user := &models.User{
+			ID:          userID,
+			Email:       email,
+			DisplayName: displayName,
+			Address:     address,
+			Phone:       phone,
+			CreatedAt:   createdAt,
+			UpdatedAt:   updatedAt,
+		}
+		
+		users = append(users, user)
 	}
 	
 	return users, nil
@@ -104,7 +129,6 @@ func (s *SpannerClient) UpdateUser(ctx context.Context, user *models.User) error
 		"DisplayName": user.DisplayName,
 		"Address":     user.Address,
 		"Phone":       user.Phone,
-		"Metadata":    user.Metadata,
 		"UpdatedAt":   user.UpdatedAt,
 	})
 	
@@ -122,7 +146,7 @@ func (s *SpannerClient) DeleteUser(ctx context.Context, userID string) error {
 // GetUserByEmail gets a user by email
 func (s *SpannerClient) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	stmt := spanner.Statement{
-		SQL: `SELECT UserID, Email, DisplayName, Address, Phone, Metadata, CreatedAt, UpdatedAt 
+		SQL: `SELECT UserID, Email, DisplayName, Address, Phone, CreatedAt, UpdatedAt 
 			  FROM Users WHERE Email = @email LIMIT 1`,
 		Params: map[string]interface{}{
 			"email": email,
@@ -140,10 +164,23 @@ func (s *SpannerClient) GetUserByEmail(ctx context.Context, email string) (*mode
 		return nil, err
 	}
 	
-	var user models.User
-	if err := row.ToStruct(&user); err != nil {
+	// Extract user fields manually to avoid Metadata issues
+	var userID, userEmail, displayName, address, phone string
+	var createdAt, updatedAt time.Time
+	
+	if err := row.Columns(&userID, &userEmail, &displayName, &address, &phone, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
 	
-	return &user, nil
+	user := &models.User{
+		ID:          userID,
+		Email:       userEmail,
+		DisplayName: displayName,
+		Address:     address,
+		Phone:       phone,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+	}
+	
+	return user, nil
 }

@@ -85,15 +85,16 @@ func (h *UserOrgHandler) Create(c *gin.Context) {
 	user, err := h.DB.GetUser(c.Request.Context(), userID)
 	if err != nil {
 		logger("User not found, creating new user: %s", userID)
+		// Create a new user without metadata
 		user = &models.User{
 			ID:          userID,
 			Email:       req.Email,
 			DisplayName: req.DisplayName,
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
-			Metadata:    "{}", // Initialize with empty JSON object
 		}
 
+		// Create the user
 		if err := h.DB.CreateUser(c.Request.Context(), user); err != nil {
 			logger("Failed to create user: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user: " + err.Error()})
