@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"log"
 	"time"
 	"errors"
 
@@ -21,6 +22,14 @@ func (s *SpannerClient) CreateUser(ctx context.Context, user *models.User) error
 		user.UpdatedAt = now
 	}
 
+	// Ensure Metadata is valid JSON
+	if user.Metadata == "" {
+		user.Metadata = "{}"
+	}
+
+	// Log the user data for debugging
+	log.Printf("Creating user with ID: %s, Email: %s, Metadata: %s", user.ID, user.Email, user.Metadata)
+
 	mutation := spanner.InsertOrUpdateMap("Users", map[string]interface{}{
 		"UserID":      user.ID,
 		"Email":       user.Email,
@@ -33,6 +42,9 @@ func (s *SpannerClient) CreateUser(ctx context.Context, user *models.User) error
 	})
 	
 	_, err := s.Client.Apply(ctx, []*spanner.Mutation{mutation})
+	if err != nil {
+		log.Printf("Error creating user: %v", err)
+	}
 	return err
 }
 

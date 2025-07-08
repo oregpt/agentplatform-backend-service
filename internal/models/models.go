@@ -75,8 +75,6 @@ type UserAgentMapping struct {
 	UserID         string `json:"userId"`
 	OrganizationID string `json:"organizationId"`
 	AgentID        string `json:"agentId"`
-	Email          string `json:"email"`
-	DisplayName    string `json:"displayName"`
 }
 
 // CreateOrganizationRequest represents a request to create an organization

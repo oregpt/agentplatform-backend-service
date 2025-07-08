@@ -928,18 +928,9 @@ func (s *SpannerClient) ListUserAgents(ctx context.Context, userID string, organ
 
 // GetUsersByAgent gets all users assigned to a specific agent
 func (s *SpannerClient) GetUsersByAgent(ctx context.Context, agentID string) ([]models.UserAgentMapping, error) {
-	// Query to get all UserAgent records for this agent with user email information
+	// Query to get all UserAgent records for this agent
 	query := spanner.Statement{
-		SQL: `
-			SELECT 
-				ua.UserID, 
-				ua.OrganizationID, 
-				u.Email, 
-				u.DisplayName 
-			FROM UserAgents ua 
-			LEFT JOIN Users u ON ua.UserID = u.ID 
-			WHERE ua.AgentID = @agentID
-		`,
+		SQL: `SELECT UserID, OrganizationID FROM UserAgents WHERE AgentID = @agentID`,
 		Params: map[string]interface{}{
 			"agentID": agentID,
 		},
@@ -959,18 +950,14 @@ func (s *SpannerClient) GetUsersByAgent(ctx context.Context, agentID string) ([]
 		}
 
 		var userID, organizationID string
-		var email, displayName spanner.NullString
-		if err := row.Columns(&userID, &organizationID, &email, &displayName); err != nil {
+		if err := row.Columns(&userID, &organizationID); err != nil {
 			return nil, err
 		}
 
-		// Create mapping with email information
 		userAgentMappings = append(userAgentMappings, models.UserAgentMapping{
 			UserID:         userID,
 			OrganizationID: organizationID,
 			AgentID:        agentID,
-			Email:          email.StringVal,
-			DisplayName:    displayName.StringVal,
 		})
 	}
 

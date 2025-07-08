@@ -91,7 +91,7 @@ func (h *UserOrgHandler) Create(c *gin.Context) {
 			DisplayName: req.DisplayName,
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
-			Metadata:    "{}",
+			Metadata:    "{}", // Initialize with empty JSON object
 		}
 
 		if err := h.DB.CreateUser(c.Request.Context(), user); err != nil {
