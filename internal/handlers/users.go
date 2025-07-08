@@ -24,25 +24,30 @@ func NewUserOrgHandler(db *db.SpannerClient) *UserOrgHandler {
 
 // Create creates a new user organization membership
 func (h *UserOrgHandler) Create(c *gin.Context) {
-	// Get organization ID from context with safe type assertion
-	orgIDValue, exists := c.Get("org_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
-		return
-	}
-	
-	// Safely convert orgID to string
-	orgID, ok := orgIDValue.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid organization ID format"})
-		return
-	}
-
-	// Parse request body
+	// Parse request body to get the user and organization data
 	var req models.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	
+	// Use organization ID from the request payload if provided, otherwise fall back to context
+	orgID := req.OrganizationID
+	if orgID == "" {
+		// Fall back to org_id from context if not in payload
+		orgIDValue, exists := c.Get("org_id")
+		if !exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Organization ID not found in request or context"})
+			return
+		}
+		
+		// Safely convert orgID to string
+		var ok bool
+		orgID, ok = orgIDValue.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid organization ID format"})
+			return
+		}
 	}
 
 	// Set up safe logging

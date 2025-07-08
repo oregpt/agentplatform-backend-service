@@ -110,10 +110,11 @@ type UpdateAgentRequest struct {
 
 // CreateUserRequest represents a request to create a user
 type CreateUserRequest struct {
-	UserID      string `json:"user_id"`
-	Email       string `json:"email" binding:"required,email"`
-	DisplayName string `json:"display_name"`
-	Role        string `json:"role" binding:"required"`
+	UserID         string `json:"user_id"`
+	OrganizationID string `json:"organization_id"`
+	Email          string `json:"email" binding:"required,email"`
+	DisplayName    string `json:"display_name"`
+	Role           string `json:"role" binding:"required"`
 }
 
 // UpdateUserRequest represents a request to update a user
