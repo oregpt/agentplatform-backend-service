@@ -293,20 +293,43 @@ func (h *UserOrgHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// Get org ID from context
-	orgID, exists := c.Get("org_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context"})
+	// First check if org_id is provided as a query parameter
+	queryOrgID := c.Query("org_id")
+	
+	// If not in query, get org ID from context
+	var orgID string
+	if queryOrgID != "" {
+		// Use the org ID from query parameter
+		orgID = queryOrgID
+		log.Printf("Using organization ID from query parameter: %s", orgID)
+	} else {
+		// Get from context as fallback
+		contextOrgID, exists := c.Get("org_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Organization ID not found in context or query parameters"})
+			return
+		}
+		orgID = contextOrgID.(string)
+		log.Printf("Using organization ID from context: %s", orgID)
+	}
+
+	// Validate that we have a non-empty org ID
+	if orgID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Organization ID cannot be empty"})
 		return
 	}
 
+	log.Printf("Deleting user-org association: userID=%s, orgID=%s", userID, orgID)
+	
 	// Delete user organization membership
-	if err := h.DB.DeleteUserOrg(c.Request.Context(), userID, orgID.(string)); err != nil {
+	if err := h.DB.DeleteUserOrg(c.Request.Context(), userID, orgID); err != nil {
+		log.Printf("Error deleting user-org association: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User deleted"})
+	log.Printf("Successfully deleted user-org association for userID=%s, orgID=%s", userID, orgID)
+	c.JSON(http.StatusOK, gin.H{"message": "User removed from organization"})
 }
 
 // AssignToAgent assigns a user to an agent
